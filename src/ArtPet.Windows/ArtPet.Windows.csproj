@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Media/Sprout.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
     <HoolheyakCharacterFolder>霍爾海雅</HoolheyakCharacterFolder>
     <ProjectAssetsDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets</ProjectAssetsDirectory>
     <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)\character.json')">$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)</HoolheyakPackDirectory>
@@ -17,6 +18,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Media/Sprout.ico" />
+    <EmbeddedResource Include="Desktop/ApplyUpdate.ps1" LogicalName="ArtPet.ApplyUpdate.ps1" />
   </ItemGroup>
   <ItemGroup Condition="'$(BundleHoolheyak)' == 'true'">
     <Content Include="$(HoolheyakPackDirectory)\character.json;$(HoolheyakPackDirectory)\**\*.png;$(HoolheyakPackDirectory)\**\*.jpg;$(HoolheyakPackDirectory)\**\*.jpeg"

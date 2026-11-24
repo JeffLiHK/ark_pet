@@ -1,7 +1,7 @@
 <Window x:Class="ArtPet.Windows.Wardrobe.WardrobeWindow" x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Art Pet 衣櫃" Width="454" Height="588" MinWidth="290" MinHeight="240"
+        Title="Art Pet 衣櫃" Width="470" Height="588" MinWidth="290" MinHeight="240"
         Background="#131B20" Foreground="#F5F5EE" FontFamily="Microsoft JhengHei UI, Segoe UI" FontSize="14"
         UseLayoutRounding="True" PreviewKeyDown="CloseOnEscape">
     <Window.Resources>
@@ -102,12 +102,13 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Button Style="{StaticResource CardButton}" Click="ShowOutfits"
-                                        AutomationProperties.Name="{Binding AccessibleName}">
+                                        AutomationProperties.Name="{Binding AccessibleName}"
+                                        AutomationProperties.HelpText="{Binding PortraitStatus}">
                                     <StackPanel Width="170">
-                                        <Grid Height="170" Background="{StaticResource PreviewBackground}">
-                                            <Image Source="{Binding Preview}" Stretch="Uniform" Margin="3"
+                                        <Grid Height="235" Background="{StaticResource PortraitBackground}" ClipToBounds="True">
+                                            <Image Source="{Binding Portrait}" Stretch="Uniform"
                                                    RenderOptions.BitmapScalingMode="HighQuality" />
-                                            <TextBlock Style="{StaticResource ImageStatus}" Text="{Binding PreviewStatus}" />
+                                            <TextBlock Style="{StaticResource ImageStatus}" Text="{Binding PortraitStatus}" />
                                         </Grid>
                                         <StackPanel Margin="10,10,10,9">
                                             <TextBlock Text="{Binding DisplayName}" FontSize="17" FontWeight="SemiBold"

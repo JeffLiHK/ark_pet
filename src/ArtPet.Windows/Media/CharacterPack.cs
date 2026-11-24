@@ -13,7 +13,8 @@ internal sealed class CharacterPack
 {
     private const string CharacterFolder = "霍爾海雅";
     private const string LegacyCharacterFolder = "hoolheyak";
-    private const long OutfitPixelBudget = 64L * 1024 * 1024;
+    // Keep a 250-pixel canvas for the longest bundled outfit at 125% scale on a 125% display.
+    private const long OutfitDecodedBytesBudget = 300L * 1024 * 1024;
     private const int MaximumOutfitFrames = 4096;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _directory;
@@ -165,7 +166,7 @@ internal sealed class CharacterPack
 
         FrameClip? touch = touchDefinition is null ? null : DecodeOptionalClip(touchDefinition, decodeWidth, cancellationToken);
         var anchor = new System.Windows.Point((double)_canvas.AnchorX / _canvas.Width, (double)_canvas.AnchorY / _canvas.Height);
-        return new LoadedOutfit(outfit, idleClips, touch, anchor);
+        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit));
     }
 
     internal BitmapSource? LoadPortrait(OutfitDefinition outfit)
@@ -237,7 +238,7 @@ internal sealed class CharacterPack
     private int GetDecodeWidth(int frameCount)
     {
         double decodedBytes = 4d * _canvas.Width * _canvas.Height * frameCount;
-        double scale = Math.Min(1, Math.Sqrt(OutfitPixelBudget / decodedBytes));
+        double scale = Math.Min(1, Math.Sqrt(OutfitDecodedBytesBudget / decodedBytes));
         return Math.Max(1, (int)Math.Floor(_canvas.Width * scale));
     }
 
@@ -328,7 +329,8 @@ internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount)
 
 internal sealed record FrameClip(int Fps, BitmapSource[] Frames);
 
-internal sealed record LoadedOutfit(OutfitDefinition Definition, IReadOnlyList<FrameClip> IdleClips, FrameClip? Touch, System.Windows.Point Anchor)
+internal sealed record LoadedOutfit(OutfitDefinition Definition, IReadOnlyList<FrameClip> IdleClips, FrameClip? Touch,
+    System.Windows.Point Anchor, BitmapSource? Preview)
 {
     internal FrameClip Idle => IdleClips[0];
 }

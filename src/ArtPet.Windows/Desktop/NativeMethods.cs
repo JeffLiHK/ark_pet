@@ -27,6 +27,7 @@ internal static class NativeMethods
     private const uint MonitorDefaultToNearest = 0x0002;
     private const int ExtendedStyle = -20;
     private const int TransparentStyle = 0x00000020;
+    private const int NoActivateStyle = 0x08000000;
 
     internal static bool MoveWindow(IntPtr handle, int x, int y, bool deferErase = false)
     {
@@ -40,11 +41,11 @@ internal static class NativeMethods
         SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, NoSize | NoMove | NoActivateOnPosition);
     }
 
-    internal static void SetMousePassThrough(IntPtr handle, bool enabled)
+    internal static void SetPassiveInput(IntPtr handle, bool passThrough)
     {
         // A layered window with WS_EX_TRANSPARENT passes mouse input through at every pixel.
         int style = GetWindowLongW(handle, ExtendedStyle);
-        int newStyle = enabled ? style | TransparentStyle : style & ~TransparentStyle;
+        int newStyle = (passThrough ? style | TransparentStyle : style & ~TransparentStyle) | NoActivateStyle;
         if (newStyle != style)
         {
             SetWindowLongW(handle, ExtendedStyle, newStyle);
@@ -55,7 +56,7 @@ internal static class NativeMethods
 
     internal static void SetPassivePopup(IntPtr handle, bool topmost)
     {
-        SetMousePassThrough(handle, enabled: true);
+        SetPassiveInput(handle, passThrough: true);
         SetWindowPos(handle, new IntPtr(topmost ? -1 : -2), 0, 0, 0, 0, NoSize | NoMove | NoActivateOnPosition);
     }
 
@@ -115,6 +116,10 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     internal static extern uint GetDpiForWindow(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool DestroyIcon(IntPtr handle);
 
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromPoint(Point point, uint flags);

@@ -3,4 +3,6 @@ obj/
 .vs/
 artifacts/
 /local-data/
+/Ark-Models/
+/ArknightsGameResource/
 *.user

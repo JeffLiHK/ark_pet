@@ -143,12 +143,20 @@ if (-not (Test-Path -LiteralPath $modelDestination)) {
             ArkFolder = '4027_heyak_ambiencesynesthesia#4'
             Basename = 'build_char_4027_heyak_ambienceSynesthesia#4'
         }
+        'ritual-of-immortality' = @{
+            ArkFolder = '4027_heyak_epoque#50'
+            Basename = 'build_char_4027_heyak_epoque#50'
+        }
     }
     $sources = @{}
     foreach ($id in $modelFiles.Keys) {
+        if (-not $skinFolders.ContainsKey($id)) {
+            continue
+        }
+
         $model = $modelFiles[$id]
         $files = @('atlas', 'png', 'skel' | ForEach-Object { "$($model.Basename).$_" })
-        foreach ($directory in (Join-Path $legacyCharacter $id), (Join-Path $sourceRoot "Ark-Models/models/$($model.ArkFolder)")) {
+        foreach ($directory in (Join-Path $sourceRoot "Ark-Models/models/$($model.ArkFolder)"), (Join-Path $legacyCharacter $id)) {
             $paths = @($files | ForEach-Object { Join-Path $directory $_ })
             if (-not @($paths | Where-Object { -not [IO.File]::Exists($_) }).Count) {
                 $sources[$id] = $paths

@@ -71,8 +71,7 @@ public partial class App : Application
         Action? openWardrobe = null;
         if (session is { Pack: { } currentPack, Outfit: { } displayed })
         {
-            pet.SetVoiceCharacter(currentPack.Id);
-            pet.SetOutfit(displayed);
+            DisplayOutfit(pet, currentPack, displayed);
             openWardrobe = () => OpenWardrobe(pet, session, installedPacks);
             pet.AddWardrobeCommand(openWardrobe);
 
@@ -81,8 +80,7 @@ public partial class App : Application
                 if (session is { Pack: { } selectedPack, Outfit: { } outfit } && outfit != displayed)
                 {
                     displayed = outfit;
-                    pet.SetVoiceCharacter(selectedPack.Id);
-                    pet.SetOutfit(outfit);
+                    DisplayOutfit(pet, selectedPack, outfit);
                 }
             };
         }
@@ -91,6 +89,25 @@ public partial class App : Application
         pet.AddSettingsCommand(openSettings);
         _tray = new TrayIcon(pet, () => Shutdown(), openSettings, openWardrobe);
         pet.ShowPet();
+    }
+
+    private void DisplayOutfit(PetWindow pet, CharacterPack pack, LoadedOutfit outfit)
+    {
+        pet.SetVoiceCharacter(pack.Id);
+        pet.SetOutfit(outfit);
+
+        var icon = CharacterIcon.Create(outfit);
+        pet.Icon = icon;
+        _tray?.SetCharacterIcon(icon);
+        if (_settingsWindow is { } settings)
+        {
+            settings.Icon = icon;
+        }
+
+        if (_wardrobe is { } wardrobe)
+        {
+            wardrobe.Icon = icon;
+        }
     }
 
     private void OpenSettings(PetWindow pet)
@@ -106,7 +123,7 @@ public partial class App : Application
             return;
         }
 
-        var settingsWindow = new SettingsWindow(pet.Settings);
+        var settingsWindow = new SettingsWindow(pet.Settings) { Icon = pet.Icon };
         _settingsWindow = settingsWindow;
         settingsWindow.SettingsSelected += pet.ChooseSettings;
         settingsWindow.Closed += (_, _) => _settingsWindow = null;
@@ -126,7 +143,7 @@ public partial class App : Application
             return;
         }
 
-        var wardrobe = new WardrobeWindow(session, installedPacks);
+        var wardrobe = new WardrobeWindow(session, installedPacks) { Icon = pet.Icon };
         _wardrobe = wardrobe;
         wardrobe.Closed += (_, _) => _wardrobe = null;
         wardrobe.ShowNear(pet);

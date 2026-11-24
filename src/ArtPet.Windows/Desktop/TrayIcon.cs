@@ -1,20 +1,22 @@
 using System;
 using System.Drawing;
 using System.Windows.Forms;
+using System.Windows.Media.Imaging;
 
 namespace ArtPet.Windows.Desktop;
 
 internal sealed class TrayIcon : IDisposable
 {
-    private readonly Icon _image;
+    private readonly Icon _fallbackImage;
     private readonly ContextMenuStrip _menu = new();
     private readonly NotifyIcon _icon;
+    private Icon? _characterImage;
 
     public TrayIcon(PetWindow pet, Action exit, Action openSettings, Action? openWardrobe)
     {
         var iconUri = new Uri("/ArtPet.Windows;component/Media/Sprout.ico", UriKind.Relative);
         using var imageStream = System.Windows.Application.GetResourceStream(iconUri)!.Stream;
-        _image = new Icon(imageStream, SystemInformation.SmallIconSize);
+        _fallbackImage = new Icon(imageStream, SystemInformation.SmallIconSize);
 
         var visibilityItem = new ToolStripMenuItem();
         visibilityItem.Click += (_, _) =>
@@ -56,7 +58,9 @@ internal sealed class TrayIcon : IDisposable
             topmostItem.Checked = pet.Topmost;
         };
 
-        _icon = new NotifyIcon { Text = "Art Pet", Icon = _image, ContextMenuStrip = _menu, Visible = true };
+        _icon = new NotifyIcon { Text = "Art Pet", ContextMenuStrip = _menu };
+        SetCharacterIcon(pet.Icon as BitmapSource);
+        _icon.Visible = true;
         _icon.MouseDoubleClick += (_, e) =>
         {
             if (e.Button == MouseButtons.Left)
@@ -66,6 +70,14 @@ internal sealed class TrayIcon : IDisposable
         };
     }
 
+    internal void SetCharacterIcon(BitmapSource? artwork)
+    {
+        Icon? replacement = artwork is null ? null : CharacterIcon.ToTrayIcon(artwork);
+        _icon.Icon = replacement ?? _fallbackImage;
+        _characterImage?.Dispose();
+        _characterImage = replacement;
+    }
+
     internal void ShowSettingsSaveError() =>
         _icon.ShowBalloonTip(3500, "Art Pet", "目前無法保存設定。重開後會恢復上次保存的設定。", ToolTipIcon.Warning);
 
@@ -73,6 +85,7 @@ internal sealed class TrayIcon : IDisposable
     {
         _icon.Dispose();
         _menu.Dispose();
-        _image.Dispose();
+        _characterImage?.Dispose();
+        _fallbackImage.Dispose();
     }
 }

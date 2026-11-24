@@ -50,7 +50,7 @@ flowchart LR
 
 **摸摸與拖曳。** 主鍵按下時記錄螢幕座標，超過 Windows 的拖曳閾值才移動。短按放開時以 `WindowFromPoint` 確認游標仍位於小人的可見區域。按下和放開皆命中小人，且位移低於閾值時觸發摸摸。由於背景視窗的滑鼠擷取範圍有限，從按下到完成手勢期間，以短時的 `DispatcherTimer` 讀取游標及 Windows 主鍵對應的實體按鍵。移動用 `SetWindowPos` 的 `SWP_NOACTIVATE` 保持前景視窗。放開、隱藏或結束時停止手勢計時。所有放開路徑走同一個完成方法，避免重複觸發和拖曳後誤播動畫。[Win32 滑鼠擷取](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setcapture) · [讀取滑鼠按鍵狀態](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getasynckeystate)
 
-**螢幕位置。** WPF 以 DIP 設定視窗大小與內容，桌面位置與拖曳換算使用 Win32 實體像素。在 `app.manifest` 宣告 Per-Monitor V2 DPI awareness，依螢幕工作區與實際視窗尺寸限制放置範圍。記錄顯示器名稱與角色錨點在工作區的比例，換裝和縮放以同一錨點放置，容許靠邊時回到可見範圍。預設為主螢幕右下角、距工作區邊緣各 16 DIP、100% 時畫布長邊為 160 DIP，依素材比例顯示，另有 75% 和 125% 選項，置頂預設開啟。螢幕配置、DPI 變更或從通知區叫回時重新檢查放置位置，副螢幕拔除時回主螢幕右下角。[Per-Monitor V2](https://learn.microsoft.com/en-us/windows/win32/hidpi/dpi-awareness-context) · [螢幕工作區座標](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-monitorinfo)
+**螢幕位置。** WPF 以 DIP 設定視窗大小與內容，桌面位置與拖曳換算使用 Win32 實體像素。在 `app.manifest` 宣告 Per-Monitor V2 DPI awareness，依螢幕工作區與實際視窗尺寸限制放置範圍。記錄顯示器名稱與角色錨點在工作區的比例，換裝和縮放以同一錨點放置，容許靠邊時回到可見範圍。預設為主螢幕右下角、距工作區邊緣各 16 DIP、100% 時畫布長邊為 160 DIP，依素材比例顯示，另有 75%、125%、150%、175% 和 200% 選項，置頂預設開啟。螢幕配置、DPI 變更或從通知區叫回時重新檢查放置位置，副螢幕拔除時回主螢幕右下角。[Per-Monitor V2](https://learn.microsoft.com/en-us/windows/win32/hidpi/dpi-awareness-context) · [螢幕工作區座標](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-monitorinfo)
 
 **播放。** `AnimationPlayer` 循環播放 `idle`，點擊時插入一次 `touch`，結束後從頭播放 `idle`。缺少 `touch` 時，在待機上疊一個約半秒的 WPF 微風特效。反應期間的連點共用當前反應。動畫預設且最高為 24 FPS。可見時用單一 `DispatcherTimer` 依 `Stopwatch` 計算下一幀的絕對時間並設定下次喚醒。延遲時直接取當前影格，角色圖像只在造型、片段或影格索引變更時更新。隱藏時停止計時，叫回時從待機開始。[WPF DispatcherTimer 的調度行為](https://learn.microsoft.com/en-us/dotnet/api/system.windows.threading.dispatchertimer?view=windowsdesktop-10.0)
 
@@ -105,7 +105,7 @@ flowchart LR
 }
 ```
 
-`placement` 有值時包含 `monitorName`、`anchorX` 和 `anchorY`。錨點為相對螢幕工作區的比例，各介於 0 到 1。`sizePercent` 接受 75、100、125。缺少或超出範圍的偏好欄位使用預設值。使用者完成拖曳、成功選擇素材或換裝，以及更改大小或置頂時自動保存。以單一寫入流程把最新快照寫到同目錄暫存檔，再替換正式檔案，結束時等待最後一次寫入。初次建立用 `File.Move`，已有設定用 `File.Replace`。[File.Replace](https://learn.microsoft.com/en-us/dotnet/api/system.io.file.replace?view=net-10.0)
+`placement` 有值時包含 `monitorName`、`anchorX` 和 `anchorY`。錨點為相對螢幕工作區的比例，各介於 0 到 1。`sizePercent` 接受 75、100、125、150、175、200。缺少或超出範圍的偏好欄位使用預設值。使用者完成拖曳、成功選擇素材或換裝，以及更改大小或置頂時自動保存。以單一寫入流程把最新快照寫到同目錄暫存檔，再替換正式檔案，結束時等待最後一次寫入。初次建立用 `File.Move`，已有設定用 `File.Replace`。[File.Replace](https://learn.microsoft.com/en-us/dotnet/api/system.io.file.replace?view=net-10.0)
 
 - 開啟程式時依序嘗試上次選的造型、同資料夾的預設造型。首次未選資料夾或皆無法載入時，保留通知區以便重新選擇。素材可用時，小人從顯示和待機開始，隱藏為當次狀態。
 - 螢幕拔除造成的自動移位只作用於當次顯示。設定中的位置在使用者再次完成拖曳時才更新。

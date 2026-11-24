@@ -13,7 +13,11 @@ internal sealed record PetSettings
     internal const int DefaultIdleLoopsPerAction = 12;
     internal const int MinIdleLoopsPerAction = 1;
     internal const int MaxIdleLoopsPerAction = 100;
-    internal static ReadOnlySpan<int> Sizes => [75, DefaultSize, 125];
+    internal const string Japanese = "ja";
+    internal const string Mandarin = "zh-CN";
+    internal const string TraditionalChinese = "zh-TW";
+    internal const string SubtitlesOff = "off";
+    internal static ReadOnlySpan<int> Sizes => [75, DefaultSize, 125, 150, 175, 200];
     internal static ReadOnlySpan<int> FrameRates => [DefaultAnimationFps, 60];
 
     public int SchemaVersion { get; init; } = 1;
@@ -21,6 +25,11 @@ internal sealed record PetSettings
     public int AnimationFps { get; init; } = DefaultAnimationFps;
     public int IdleLoopsPerAction { get; init; } = DefaultIdleLoopsPerAction;
     public bool InteractionEnabled { get; init; } = true;
+    public int OutlineLevel { get; init; }
+    public int ShadowLevel { get; init; }
+    public int VoiceVolumePercent { get; init; } = 100;
+    public string VoiceLanguage { get; init; } = Japanese;
+    public string SubtitleLanguage { get; init; } = TraditionalChinese;
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? OtherSettings { get; init; }
@@ -43,9 +52,18 @@ internal sealed class PetSettingsStore(string filePath)
                 {
                     SizePercent = PetSettings.Sizes.Contains(settings.SizePercent) ? settings.SizePercent : PetSettings.DefaultSize,
                     AnimationFps = PetSettings.FrameRates.Contains(settings.AnimationFps) ? settings.AnimationFps : PetSettings.DefaultAnimationFps,
+                    OutlineLevel = Math.Clamp(settings.OutlineLevel, 0, 3),
+                    ShadowLevel = Math.Clamp(settings.ShadowLevel, 0, 3),
+                    VoiceVolumePercent = Math.Clamp(settings.VoiceVolumePercent, 0, 100),
                     IdleLoopsPerAction = settings.IdleLoopsPerAction is >= PetSettings.MinIdleLoopsPerAction and <= PetSettings.MaxIdleLoopsPerAction
                         ? settings.IdleLoopsPerAction
-                        : PetSettings.DefaultIdleLoopsPerAction
+                        : PetSettings.DefaultIdleLoopsPerAction,
+                    VoiceLanguage = settings.VoiceLanguage is PetSettings.Japanese or PetSettings.Mandarin
+                        ? settings.VoiceLanguage
+                        : PetSettings.Japanese,
+                    SubtitleLanguage = settings.SubtitleLanguage is PetSettings.TraditionalChinese or PetSettings.Japanese or PetSettings.SubtitlesOff
+                        ? settings.SubtitleLanguage
+                        : PetSettings.TraditionalChinese
                 };
             }
 

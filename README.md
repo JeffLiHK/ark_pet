@@ -1,10 +1,10 @@
 # Art Pet 桌面寵物
 
-Art Pet 啟動後，霍爾海雅會在主螢幕工作列附近待機，隨機輪播 Idle、Move、Sit 和 Sleep。短按可播放基建互動與日語語音，按住可拖曳。衣櫃可選角色與造型。程式離線執行，免登入。
+Art Pet 啟動後，霍爾海雅會在主螢幕工作列附近待機，隨機輪播 Idle、Move、Sit 和 Sleep。短按可播放基建互動與語音，按住可拖曳。衣櫃可選角色與造型。桌面功能可離線使用，檢查更新需要網路連線。
 
 ## 啟動與操作
 
-日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先從專案的 `local-data/assets/霍爾海雅` 載入影格，造型分別位於「預設造型」和「歷世流風」子資料夾。舊版 `local-data/assets/hoolheyak/desktop-60` 和 `desktop` 仍可載入，素材缺失時會顯示原創的「小芽」。執行 `pwsh -File scripts/MigrateHoolheyakAssets.ps1` 可將現有影格與 Spine 模型依此結構複製。Spine 模型位於 `local-data/models/霍爾海雅/<造型名>`。
+日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先從 `local-data/assets/霍爾海雅` 載入預設造型、精英二立繪、歷世流風和恆久祭禮。精英二有自己的立繪，並共用預設造型的基建模型與動畫。舊版 `local-data/assets/hoolheyak/desktop-60` 和 `desktop` 仍可載入，素材缺失時會顯示原創的「小芽」。
 
 ```powershell
 dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
@@ -12,23 +12,45 @@ dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
 
 - 畫布預設為 160 DIP，在主螢幕工作區右下角，離右邊及底部各 16 DIP，並置頂。
 - 顯示或換裝時先播 Idle。每個待機動作預設完整循環 12 次，再淡化過渡到另一個動作。Move 會在桌面原位播放。短按互動結束後會回到原待機動作。
-- 已匯入語音時，短按霍爾海雅會隨機播放一條日語語音，角色上方會顯示對應字幕。 [語音素材匯入方式](docs/hoolheyak-voice.md)
-- 按住可將角色拖到螢幕邊緣或拖出螢幕。右鍵可開衣櫃、切換置頂或隱藏。衣櫃先選角色，再選造型。
-- 右鍵選單和工作列通知區都可開啟獨立設定視窗，調整縮放、幀率、待機循環次數和互動模式。變更立即套用並保存到 `local-data/settings.json`。關閉互動模式後，滑鼠會穿透角色，仍可從通知區開設定恢復。
+- 已匯入語音時，短按霍爾海雅會隨機播放一條語音，預設使用日語配音與繁體中文字幕。 [語音素材匯入方式](docs/hoolheyak-voice.md)
+- 按住可將角色拖到螢幕邊緣或拖出螢幕。右鍵可開衣櫃、切換置頂或隱藏。衣櫃以立繪顯示角色列表，選擇角色後可查看各造型的模型預覽和立繪。
+- 右鍵選單和工作列通知區都可開啟設定視窗。「一般」可調整縮放、幀率、待機循環次數和互動模式，也可為目前 Windows 使用者啟用登入時啟動。「外觀」可分別調整高亮描邊和陰影。「語音與字幕」可調整配音、字幕和語音音量，音量設為 0% 即靜音。循環次數可直接輸入，按 Enter 或離開欄位即可套用。畫面與語音偏好會自動保存到 `local-data/settings.json`。關閉互動模式後，滑鼠會穿透角色，仍可從通知區開設定恢復。
+- 在「更新」點選「檢查 GitHub 更新」。Windows x64 自包含發佈版找到新版時，可下載並重新啟動。更新會驗證 GitHub 提供的 SHA-256，保留 `local-data` 及現有 `assets`。
 - 從通知區的 **Art Pet** 圖示可開衣櫃、顯示、隱藏、切換置頂、移回主螢幕右下角或結束。找不到圖示時，展開通知區的隱藏圖示。雙擊圖示會顯示角色。
 - 造型、位置、置頂及顯示狀態在當次執行期間有效。再次啟動會套用預設造型和桌面位置。同一 Windows 登入工作階段只會執行一個實例。
 
+## 匯入本機角色素材
+
+新增或重建模型時優先使用專案根目錄的 `Ark-Models`，立繪則取自同層的 `ArknightsGameResource`。匯入需要 Node.js 22、Microsoft Edge，以及首次下載 Spine 3.8 匯出工具的網路連線。 [Ark-Models](https://github.com/isHarryh/Ark-Models) · [ArknightsGameResource](https://github.com/yuanyan3060/ArknightsGameResource)
+
+```powershell
+npm.cmd install --prefix local-data/tools --no-save --no-package-lock playwright-core@1.56.1
+node scripts/ImportHoolheyakAssets.mjs
+dotnet run --file scripts/ValidateHoolheyakPack.cs -- 'local-data/assets/霍爾海雅'
+```
+
+匯入會將三套基建模型的 `Relax`、`Move`、`Sit`、`Sleep` 和 `Interact` 匯出成 320 × 320、60 FPS 的透明 PNG，各造型共用畫布比例和錨點。原始 Spine 模型存放於 `local-data/models/霍爾海雅/<造型名>`。重複匯入時，舊素材會保存在 `local-data` 的備份目錄。已有舊版影格也可用 `pwsh -File scripts/MigrateHoolheyakAssets.ps1` 移到新版目錄結構。
+
 ## 製作本機測試包
 
-需要交付成品或驗證發佈版本時，再執行打包指令。
-
-兩套基建模型都使用 Spine 3.8.99，取 `Relax`（Idle）、`Move`、`Sit`、`Sleep` 和 `Interact` 匯出為共用腳底錨點的 256 × 256 透明 PNG，每秒 60 格。30 FPS 模式每兩格取一格，兩種模式的動作長度相同。實際畫面更新受素材幀率、螢幕更新率和系統負載影響。預設造型取自 PRTS，「歷世流風」取自 Ark-Models。原始模型、動畫影格和使用者設定都在專案的 `local-data`，由 Git 忽略。含素材的測試包放在 Git 忽略的 `artifacts` 下。 [PRTS 模型索引](https://prts.wiki/w/霍尔海雅/spine) · [Ark-Models](https://github.com/isHarryh/Ark-Models)
+需要交付成品或驗證發佈版本時，先匯入角色素材，再執行打包指令。原始模型、動畫影格和使用者設定都在 Git 忽略的 `local-data`。含素材的測試包放在 Git 忽略的 `artifacts` 下。
 
 ```powershell
 dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -p:BundleHoolheyak=true -o artifacts/ArtPet-win-x64
 ```
 
-重新打包後，可開啟 `artifacts/ArtPet-win-x64/ArtPet.Windows.exe`。自包含資料夾內有兩套造型和執行環境。如果把新版測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
+重新打包後，可開啟 `artifacts/ArtPet-win-x64/ArtPet.Windows.exe`。自包含資料夾內有霍爾海雅的造型素材和執行環境。如果把測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
+
+### GitHub 更新包
+
+正式 Release 使用 `vX.Y` 或 `vX.Y.Z` 標籤，發佈時使用對應的三段式 `Version`，例如 `v1.1` 對應 `1.1.0`。更新包只包含程式與執行環境。例如製作 `v1.0.1` 的更新包可執行以下指令。每次發佈請使用全新的輸出資料夾。
+
+```powershell
+dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -p:Version=1.0.1 -o artifacts/update-1.0.1
+Compress-Archive -Path artifacts/update-1.0.1/* -DestinationPath artifacts/ArtPet-win-x64.zip
+```
+
+將 `ArtPet-win-x64.zip` 上傳為公開正式 Release 的附件。ZIP 可將 `ArtPet.Windows.exe` 放在根目錄，或將整個發佈包放在一層 `ArtPet-win-x64` 資料夾內。升級保留原安裝的角色素材及設定。
 
 ## 驗收條件
 
@@ -57,4 +79,4 @@ dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --
 - 實際從右鍵設定切換到 125% 和 60 FPS，重啟後恢復選擇，再從選單切回 30 FPS。程式內測試確認兩個幀率選項有不同的畫面更新頻率，拖曳後縮放時會保持角色的腳底錨點。
 - 程式內測試確認衣櫃切換造型時位置不變，快速切換以最後一次選擇為準，隱藏時停止動畫且仍可從衣櫃換裝。也驗證了成品內素材損毀時會嘗試本機素材。
 - 兩套造型均已用程式驗證四段待機動作皆可播到，連續輪播不重複，且 Interact 可中斷 Sleep 並回到待機。舊素材仍可循環播放 Idle。
-- 素材檢查核對兩套造型各五段動畫，共 1,668 張影格。缺少清單指定的影格時，素材檢查會失敗。
+- 新版素材包共有四張衣櫃卡和三套獨立模型。三套模型各有五段動畫，共 2,898 張影格。Windows 版已驗證逐套切換、立繪和圖示載入，以及換裝時保留桌面位置。素材檢查會核對清單指定的影格。

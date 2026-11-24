@@ -10,6 +10,23 @@ internal static class ArtworkBounds
     // Use the outfit's resting frame for a stable recovery check across animation poses.
     internal static Rect FromFrame(BitmapSource frame)
     {
+        Int32Rect pixels = VisiblePixels(frame);
+        if (pixels.IsEmpty)
+        {
+            return Rect.Empty;
+        }
+
+        // The image is centered with Stretch="Uniform" inside the square pet window.
+        double size = Math.Max(frame.Width, frame.Height);
+        double width = frame.Width / size;
+        double height = frame.Height / size;
+        return new Rect((1 - width) / 2 + pixels.X * width / frame.PixelWidth,
+            (1 - height) / 2 + pixels.Y * height / frame.PixelHeight,
+            pixels.Width * width / frame.PixelWidth, pixels.Height * height / frame.PixelHeight);
+    }
+
+    internal static Int32Rect VisiblePixels(BitmapSource frame)
+    {
         BitmapSource bitmap = frame.Format == PixelFormats.Bgra32 || frame.Format == PixelFormats.Pbgra32
             ? frame
             : new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
@@ -35,18 +52,6 @@ internal static class ArtworkBounds
             }
         }
 
-        if (right == 0)
-        {
-            return Rect.Empty;
-        }
-
-        // The image is centered with Stretch="Uniform" inside the square pet window.
-        double size = Math.Max(frame.Width, frame.Height);
-        double width = frame.Width / size;
-        double height = frame.Height / size;
-        return new Rect((1 - width) / 2 + left * width / bitmap.PixelWidth,
-            (1 - height) / 2 + top * height / bitmap.PixelHeight,
-            (right - left) * width / bitmap.PixelWidth,
-            (bottom - top) * height / bitmap.PixelHeight);
+        return right == 0 ? Int32Rect.Empty : new Int32Rect(left, top, right - left, bottom - top);
     }
 }

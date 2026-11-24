@@ -1,0 +1,278 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL("../", import.meta.url));
+const localData = path.join(root, "local-data");
+const tools = path.join(localData, "tools");
+const models = path.join(root, "Ark-Models", "models");
+const portraits = path.join(root, "ArknightsGameResource", "portrait");
+const character = "霍爾海雅";
+const canvasSize = 320;
+const fps = 60;
+const animations = { idle: "Relax", move: "Move", sit: "Sit", sleep: "Sleep", touch: "Interact" };
+const outfits = [
+    { id: "default", name: "預設造型", model: "4027_heyak", portrait: "char_4027_heyak_1.png" },
+    { id: "elite-2", name: "精英二立繪", sharedModel: "default", portrait: "char_4027_heyak_2.png" },
+    { id: "winds-of-time", name: "歷世流風", model: "4027_heyak_ambienceSynesthesia#4", portrait: "char_4027_heyak_ambiencesynesthesia#4.png" },
+    { id: "ritual-of-immortality", name: "恆久祭禮", model: "4027_heyak_epoque#50", portrait: "char_4027_heyak_epoque#50.png" },
+];
+
+const require = createRequire(path.join(tools, "package.json"));
+if (!existsSync(path.join(tools, "node_modules", "playwright-core"))) {
+    throw new Error("Install the export dependency with npm install --prefix local-data/tools --no-save --no-package-lock playwright-core@1.56.1");
+}
+const { chromium } = require("playwright-core");
+const canonicalData = await realpath(localData);
+if (path.relative(await realpath(root), canonicalData) !== "local-data") {
+    throw new Error("The local-data folder must be inside the project directory.");
+}
+
+const runtimeFile = path.join(tools, "spine-webgl-3.8.js");
+const runtimeHash = "4b108bad314c152bf0ff7a7f56fce5c98073f05a2bfa53e880d6c24b6f7c3aa5";
+if (!existsSync(runtimeFile)) {
+    const response = await fetch("https://raw.githubusercontent.com/EsotericSoftware/spine-runtimes/8b4844bd4b193ba9e54487ed397a777993cbad56/spine-ts/build/spine-webgl.js",
+        { signal: AbortSignal.timeout(30_000) });
+    if (!response.ok) {
+        throw new Error(`Spine Runtime download failed: HTTP ${response.status}`);
+    }
+    const runtime = Buffer.from(await response.arrayBuffer());
+    checkRuntime(runtime);
+    await writeFile(runtimeFile, runtime);
+}
+checkRuntime(await readFile(runtimeFile));
+
+function checkRuntime(runtime) {
+    if (createHash("sha256").update(runtime).digest("hex") !== runtimeHash) {
+        throw new Error("Spine Runtime does not match the pinned 3.8 build.");
+    }
+}
+
+const browser = await chromium.launch({
+    channel: "msedge",
+    headless: true,
+    args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+});
+const stage = await mkdtemp(path.join(canonicalData, ".hoolheyak-"));
+if (path.dirname(await realpath(stage)) !== canonicalData) {
+    throw new Error(`Unexpected staging path: ${stage}`);
+}
+try {
+    const page = await browser.newPage();
+    await page.addScriptTag({ path: runtimeFile });
+    await page.evaluate(startRenderer, { size: canvasSize, fps, animations });
+
+    const modelStage = path.join(stage, "models");
+    const assetStage = path.join(stage, "assets");
+    const manifestOutfits = new Map();
+    const clipsByOutfit = new Map();
+    for (const outfit of outfits.filter(outfit => outfit.model)) {
+        const directory = path.join(models, outfit.model.toLowerCase());
+        const model = path.join(directory, "build_char_" + outfit.model);
+        const atlas = await readFile(model + ".atlas", "utf8");
+        const texture = atlas.trimStart().split(/\r?\n/, 1)[0];
+        if (path.basename(texture) !== texture || !texture.endsWith(".png")) {
+            throw new Error(`Invalid texture path for ${outfit.name}: ${texture}`);
+        }
+        const texturePath = path.join(directory, texture);
+        const clips = await page.evaluate(args => window.renderer.load(args), {
+            id: outfit.id,
+            atlas,
+            texture,
+            png: await readFile(texturePath, "base64"),
+            binary: await readFile(model + ".skel", "base64"),
+        });
+        if (Object.values(clips).reduce((total, frames) => total + frames, 0) > 4096) {
+            throw new Error(`${outfit.name} exceeds the frame limit for one outfit.`);
+        }
+        clipsByOutfit.set(outfit.id, clips);
+
+        const target = path.join(modelStage, outfit.name);
+        await mkdir(target, { recursive: true });
+        for (const file of [model + ".atlas", model + ".skel", texturePath]) {
+            await copyFile(file, path.join(target, path.basename(file)));
+        }
+    }
+
+    const canvas = await page.evaluate(() => window.renderer.frame());
+    console.log(`Canvas ${canvas.width} × ${canvas.height}, anchor ${canvas.anchorX}, ${canvas.anchorY}`);
+    for (const outfit of outfits) {
+        const directory = path.join(assetStage, outfit.name);
+        await mkdir(directory, { recursive: true });
+        await copyFile(path.join(portraits, outfit.portrait), path.join(directory, "portrait.png"));
+        const art = outfit.sharedModel
+            ? manifestOutfits.get(outfit.sharedModel)
+            : await exportOutfit(page, directory, outfit, clipsByOutfit.get(outfit.id));
+        manifestOutfits.set(outfit.id, {
+            ...art,
+            id: outfit.id,
+            displayName: outfit.name,
+            portrait: `${outfit.name}/portrait.png`,
+        });
+    }
+
+    const manifest = { schemaVersion: 1, id: "hoolheyak", displayName: character, defaultOutfitId: "default", canvas, outfits: [...manifestOutfits.values()] };
+    await writeFile(path.join(assetStage, "character.json"), JSON.stringify(manifest, null, 2) + "\n");
+    await installPack([
+        { source: modelStage, destination: path.join(localData, "models", character) },
+        { source: assetStage, destination: path.join(localData, "assets", character) },
+    ]);
+    console.log(`Installed ${manifestOutfits.size} wardrobe entries for ${character}.`);
+} finally {
+    await browser.close();
+    await rm(stage, { recursive: true, force: true });
+}
+
+async function exportOutfit(page, directory, outfit, clips) {
+    const result = { preview: `${outfit.name}/preview.png` };
+    for (const [clip, frameCount] of Object.entries(clips)) {
+        const clipDirectory = path.join(directory, clip);
+        await mkdir(clipDirectory);
+        result[clip] = { directory: `${outfit.name}/${clip}`, fps, frameCount };
+        console.log(`${outfit.name} / ${clip}: ${frameCount} frames`);
+        const batchSize = 20;
+        for (let start = 0; start < frameCount; start += batchSize) {
+            const frames = await page.evaluate(args => window.renderer.render(args), {
+                id: outfit.id, clip, start, end: Math.min(start + batchSize, frameCount),
+            });
+            await Promise.all(frames.map((png, offset) =>
+                writeFile(path.join(clipDirectory, `${String(start + offset).padStart(4, "0")}.png`), png, "base64")));
+        }
+    }
+    await copyFile(path.join(directory, "idle", "0000.png"), path.join(directory, "preview.png"));
+    return result;
+}
+
+async function installPack(entries) {
+    const lock = path.join(canonicalData, ".hoolheyak-install");
+    await mkdir(lock);
+    const installed = [];
+    const saved = [];
+    let backups;
+    try {
+        backups = await mkdtemp(path.join(canonicalData, ".hoolheyak-backup-"));
+        for (const { source, destination } of entries) {
+            const parent = path.dirname(destination);
+            await mkdir(parent, { recursive: true });
+            if (path.relative(canonicalData, await realpath(parent)) !== path.basename(parent)) {
+                throw new Error(`Unexpected installation directory: ${parent}`);
+            }
+            if (existsSync(destination)) {
+                const backup = path.join(backups, path.basename(parent));
+                await rename(destination, backup);
+                saved.push({ backup, destination });
+            }
+            await rename(source, destination);
+            installed.push({ source, destination });
+        }
+    } catch (error) {
+        for (const { source, destination } of installed.reverse()) {
+            await rename(destination, source);
+        }
+        for (const { backup, destination } of saved.reverse()) {
+            await rename(backup, destination);
+        }
+        throw error;
+    } finally {
+        if (backups && saved.length === 0) {
+            await rmdir(backups);
+        }
+        await rmdir(lock);
+    }
+    if (saved.length > 0) {
+        console.log(`Previous model and asset folders were backed up in ${backups}.`);
+    }
+}
+
+function startRenderer({ size, fps, animations }) {
+    const spine = window.spine;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const gl = canvas.getContext("webgl", { alpha: true, antialias: true, preserveDrawingBuffer: true });
+    if (!gl) throw new Error("WebGL is unavailable in the export browser.");
+
+    const scene = new spine.webgl.SceneRenderer(canvas, gl);
+    const models = new Map();
+    const bounds = { left: 0, right: 0, top: 0, bottom: 0 };
+    const offset = new spine.Vector2();
+    const extent = new spine.Vector2();
+    const vertices = [];
+
+    function pose(skeleton, animation, index) {
+        skeleton.setToSetupPose();
+        animation.apply(skeleton, 0, index / fps, false, null, 1, spine.MixBlend.replace, spine.MixDirection.mixIn);
+        skeleton.updateWorldTransform();
+    }
+
+    window.renderer = {
+        async load({ id, atlas, texture, png, binary }) {
+            const image = new Image();
+            image.src = "data:image/png;base64," + png;
+            await image.decode();
+            const textureAtlas = new spine.TextureAtlas(atlas, file => {
+                if (file !== texture) throw new Error(`Unexpected atlas page ${file}`);
+                // Ark-Models PNGs already contain premultiplied alpha.
+                return new spine.webgl.GLTexture(scene.context, image);
+            });
+            const reader = new spine.SkeletonBinary(new spine.AtlasAttachmentLoader(textureAtlas));
+            const data = reader.readSkeletonData(Uint8Array.from(atob(binary), char => char.charCodeAt(0)));
+            const skeleton = new spine.Skeleton(data);
+            const clips = {};
+            const counts = {};
+            for (const [key, name] of Object.entries(animations)) {
+                const animation = data.findAnimation(name);
+                if (!animation) {
+                    throw new Error(`${id} has no ${name} animation. Found: ${data.animations.map(item => item.name).join(", ")}`);
+                }
+                clips[key] = animation;
+                const count = Math.ceil(animation.duration * fps - 0.0001);
+                if (count < 1 || count > 4096) throw new Error(`Invalid duration for ${id}/${name}`);
+                counts[key] = count;
+                for (let index = 0; index < count; index++) {
+                    pose(skeleton, animation, index);
+                    skeleton.getBounds(offset, extent, vertices);
+                    if (!Number.isFinite(offset.x + offset.y + extent.x + extent.y)) continue;
+                    bounds.left = Math.min(bounds.left, offset.x);
+                    bounds.right = Math.max(bounds.right, offset.x + extent.x);
+                    bounds.bottom = Math.min(bounds.bottom, offset.y);
+                    bounds.top = Math.max(bounds.top, offset.y + extent.y);
+                }
+            }
+            models.set(id, { skeleton, clips });
+            return counts;
+        },
+        frame() {
+            // Give every animation and outfit the same camera and model origin.
+            const padding = 12;
+            const unitsPerPixel = Math.max(bounds.right - bounds.left, bounds.top - bounds.bottom) / (size - padding * 2);
+            if (!(unitsPerPixel > 0)) throw new Error("No visible skeleton bounds were found.");
+            const x = (bounds.left + bounds.right) / 2;
+            const y = (bounds.top + bounds.bottom) / 2;
+            scene.camera.position.set(x, y, 0);
+            scene.camera.setViewport(size * unitsPerPixel, size * unitsPerPixel);
+            gl.viewport(0, 0, size, size);
+            return {
+                width: size, height: size,
+                anchorX: Math.round(size / 2 - x / unitsPerPixel),
+                anchorY: Math.round(size / 2 + y / unitsPerPixel),
+            };
+        },
+        render({ id, clip, start, end }) {
+            const { skeleton, clips } = models.get(id);
+            const frames = [];
+            for (let index = start; index < end; index++) {
+                pose(skeleton, clips[clip], index);
+                gl.clearColor(0, 0, 0, 0);
+                gl.clear(gl.COLOR_BUFFER_BIT);
+                scene.begin();
+                scene.drawSkeleton(skeleton, true);
+                scene.end();
+                frames.push(canvas.toDataURL("image/png").split(",", 2)[1]);
+            }
+            return frames;
+        },
+    };
+}

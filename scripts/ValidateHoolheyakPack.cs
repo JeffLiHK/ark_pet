@@ -25,10 +25,16 @@ try
         throw new InvalidDataException("The Hoolheyak canvas or anchor is outside the supported bounds.");
     }
 
-    foreach (string outfitId in new[] { "default", "winds-of-time" })
+    var outfits = manifest.GetProperty("outfits").EnumerateArray().ToDictionary(
+        outfit => outfit.GetProperty("id").GetString() ?? string.Empty, StringComparer.Ordinal);
+    if (!outfits.ContainsKey("default") || !outfits.ContainsKey("winds-of-time") ||
+        outfits.Keys.Any(string.IsNullOrWhiteSpace))
     {
-        JsonElement outfit = manifest.GetProperty("outfits").EnumerateArray()
-            .Single(item => item.GetProperty("id").GetString() == outfitId);
+        throw new InvalidDataException("The pack needs valid outfit IDs, the default outfit, and Carriage of the Winds of Time.");
+    }
+
+    foreach ((string outfitId, JsonElement outfit) in outfits)
+    {
         int remainingFrames = MaximumOutfitFrames;
         foreach (string clipName in new[] { "idle", "touch", "move", "sit", "sleep" })
         {

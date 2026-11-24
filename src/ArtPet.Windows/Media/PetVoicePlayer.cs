@@ -5,34 +5,52 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using System.Windows.Media;
 
 namespace ArtPet.Windows.Media;
 
 internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
 {
-    private VoiceLine[] _lines = [];
+    private Task<VoiceLine[]>? _lines;
     private MediaPlayer? _player;
+    private long _playRequest;
+    private double _volume = 1;
 
-    internal void SetCharacter(string characterId)
+    internal void SetVolume(int percent)
+    {
+        _volume = percent / 100d;
+        if (_player is { } player)
+        {
+            player.Volume = _volume;
+        }
+    }
+
+    internal void Configure(string? characterId, string voiceLanguage, string subtitleLanguage)
     {
         Stop();
         _lines = characterId == "hoolheyak"
-            ? ReadLines(Path.Combine(ProjectStorage.DataDirectory, "voices", "霍爾海雅", "ja"))
-            : [];
+            ? Task.Run(() => ReadLines(voiceLanguage, subtitleLanguage))
+            : null;
     }
 
-    internal void PlayRandom()
+    internal async Task PlayRandomAsync()
     {
         Stop();
-        VoiceLine[] available = _lines.Where(line => File.Exists(line.Path)).ToArray();
-        if (available.Length == 0)
+        if (_lines is not { } lines)
+        {
+            return;
+        }
+
+        long request = _playRequest;
+        VoiceLine[] available = await lines;
+        if (_playRequest != request || available.Length == 0)
         {
             return;
         }
 
         VoiceLine line = available[Random.Shared.Next(available.Length)];
-        var player = new MediaPlayer();
+        var player = new MediaPlayer { Volume = _volume };
         _player = player;
         player.MediaOpened += (_, _) =>
         {
@@ -65,6 +83,7 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
 
     internal void Stop()
     {
+        _playRequest++;
         if (_player is not { } player)
         {
             return;
@@ -83,22 +102,43 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
         }
     }
 
-    private static VoiceLine[] ReadLines(string directory)
+    private static VoiceLine[] ReadLines(string voiceLanguage, string subtitleLanguage)
     {
+        string root = Path.Combine(ProjectStorage.DataDirectory, "voices", "霍爾海雅");
         try
         {
-            Dictionary<string, string?>? subtitles = JsonSerializer.Deserialize<Dictionary<string, string?>>(
-                File.ReadAllText(Path.Combine(directory, "subtitles.json")));
-            return subtitles?
-                .Where(entry => Regex.IsMatch(entry.Key, @"\Acn_[0-9]{3}\z") && !string.IsNullOrWhiteSpace(entry.Value))
-                .Select(entry => new VoiceLine(Path.Combine(directory, entry.Key + ".mp3"), entry.Value!))
-                .ToArray() ?? [];
+            string[] paths = Directory.GetFiles(Path.Combine(root, voiceLanguage), "*.mp3");
+            if (paths.Length == 0)
+            {
+                return [];
+            }
+
+            var subtitles = subtitleLanguage == PetSettings.SubtitlesOff
+                ? null
+                : ReadSubtitles(Path.Combine(root, subtitleLanguage, "subtitles.json"));
+
+            return paths.Select(path => (Path: path, Id: Path.GetFileNameWithoutExtension(path).ToLowerInvariant()))
+                .Where(line => Regex.IsMatch(line.Id, @"\Acn_[0-9]{3}\z"))
+                .Select(line => new VoiceLine(line.Path, subtitles?.GetValueOrDefault(line.Id)))
+                .ToArray();
         }
-        catch (Exception error) when (CharacterPack.IsAssetError(error) || error is JsonException)
+        catch (Exception error) when (CharacterPack.IsAssetError(error))
         {
             return [];
         }
     }
 
-    private sealed record VoiceLine(string Path, string Subtitle);
+    private static Dictionary<string, string?>? ReadSubtitles(string path)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, string?>>(File.ReadAllText(path));
+        }
+        catch (Exception error) when (CharacterPack.IsAssetError(error) || error is JsonException)
+        {
+            return null;
+        }
+    }
+
+    private sealed record VoiceLine(string Path, string? Subtitle);
 }
