@@ -53,6 +53,15 @@ public partial class SproutVisual : UserControl
         RestartAnimation();
     }
 
+    internal void CancelReaction()
+    {
+        if (_reacting && _clock.IsRunning)
+        {
+            SetReaction(false);
+            RestartAnimation();
+        }
+    }
+
     private void RestartAnimation()
     {
         _clock.Restart();

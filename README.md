@@ -1,20 +1,21 @@
 # Art Pet 桌面寵物
 
-Art Pet 啟動後，霍爾海雅會在主螢幕工作列附近待機，隨機輪播 Idle、Move、Sit 和 Sleep。短按她會播放基建互動，按住可以拖曳，右鍵可打開衣櫃並換上「歷世流風」。程式離線執行，免登入。
+Art Pet 啟動後，霍爾海雅會在主螢幕工作列附近待機，隨機輪播 Idle、Move、Sit 和 Sleep。短按可播放基建互動與日語語音，按住可拖曳。衣櫃可選角色與造型。程式離線執行，免登入。
 
 ## 啟動與操作
 
-日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先使用專案內 `local-data/assets/hoolheyak/desktop-60` 的素材。舊版 `desktop` 資料夾仍可載入，素材缺失時會顯示原創的「小芽」。
+日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先從專案的 `local-data/assets/霍爾海雅` 載入影格，造型分別位於「預設造型」和「歷世流風」子資料夾。舊版 `local-data/assets/hoolheyak/desktop-60` 和 `desktop` 仍可載入，素材缺失時會顯示原創的「小芽」。執行 `pwsh -File scripts/MigrateHoolheyakAssets.ps1` 可將現有影格與 Spine 模型依此結構複製。Spine 模型位於 `local-data/models/霍爾海雅/<造型名>`。
 
 ```powershell
 dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
 ```
 
 - 畫布預設為 160 DIP，在主螢幕工作區右下角，離右邊及底部各 16 DIP，並置頂。
-- 顯示或換裝時先播 Idle，之後每播完一段便隨機切到另一段待機動作。Move 會在桌面原位播放。短按會中斷當前動作並播放 Interact，結束後回到待機輪播。
-- 連點會沿用當前互動。按住可拖曳，右鍵選單可打開衣櫃、切換置頂或隱藏角色。
-- 在右鍵選單的「設定」可選 75%、100%、125% 縮放及 30、60 FPS。預設為 100% 和 30 FPS。兩項會立即套用並保存到專案內的 `local-data/settings.json`。
-- 從工作列通知區的 **Art Pet** 圖示也可開衣櫃、顯示、隱藏、切換置頂、移回主螢幕右下角或結束。找不到圖示時，展開通知區的隱藏圖示。雙擊圖示會顯示角色。
+- 顯示或換裝時先播 Idle。每個待機動作預設完整循環 12 次，再淡化過渡到另一個動作。Move 會在桌面原位播放。短按互動結束後會回到原待機動作。
+- 已匯入語音時，短按霍爾海雅會隨機播放一條日語語音，角色上方會顯示對應字幕。 [語音素材匯入方式](docs/hoolheyak-voice.md)
+- 按住可將角色拖到螢幕邊緣或拖出螢幕。右鍵可開衣櫃、切換置頂或隱藏。衣櫃先選角色，再選造型。
+- 右鍵選單和工作列通知區都可開啟獨立設定視窗，調整縮放、幀率、待機循環次數和互動模式。變更立即套用並保存到 `local-data/settings.json`。關閉互動模式後，滑鼠會穿透角色，仍可從通知區開設定恢復。
+- 從通知區的 **Art Pet** 圖示可開衣櫃、顯示、隱藏、切換置頂、移回主螢幕右下角或結束。找不到圖示時，展開通知區的隱藏圖示。雙擊圖示會顯示角色。
 - 造型、位置、置頂及顯示狀態在當次執行期間有效。再次啟動會套用預設造型和桌面位置。同一 Windows 登入工作階段只會執行一個實例。
 
 ## 製作本機測試包
@@ -31,21 +32,21 @@ dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --
 
 ## 驗收條件
 
-1. 霍爾海雅以預設造型出現在主螢幕工作區右下角。Idle、Move、Sit、Sleep 逐段隨機輪播，同一動作不會連續播放。原本正在使用的視窗保有前景，工作列沒有角色的視窗按鈕。
-2. 點透明區域會操作下方視窗。短按角色會播放互動並回到待機，反應中快速連點只播一次。按住角色再拖曳，角色會停在新位置並維持原本的前景視窗。
-3. 衣櫃的兩套造型可在原地切換，顯示目前使用中的造型。載入失敗會保留原造型。隱藏時停止動畫，通知區可在目前位置顯示並恢復待機，也可直接移回主螢幕右下角。
+1. 霍爾海雅以預設造型出現在主螢幕工作區右下角。Idle、Move、Sit、Sleep 依設定完成循環後淡化輪換。原本正在使用的視窗保有前景，工作列沒有角色的視窗按鈕。
+2. 點透明區域會操作下方視窗。短按角色會播放互動，已匯入語音時也會隨機播放一句並顯示字幕。按住拖曳可跨螢幕或靠近螢幕邊緣，並維持原本的前景視窗。
+3. 先在衣櫃選角色，再從模型預覽與立繪卡選造型。衣櫃會標示目前造型，載入失敗時保留原造型。隱藏時停止動畫，通知區可恢復顯示或移回主螢幕右下角。
 4. 通知區的「結束程式」移除視窗、圖示並結束程序。重複啟動只保留原有視窗和圖示。
-5. 右鍵「設定」可切換縮放和幀率，勾選狀態反映目前設定。重啟會恢復兩項偏好。
+5. 設定視窗的偏好在重啟後仍有效。關閉互動模式後，滑鼠可點到角色後方的視窗，可從通知區重新開啟互動。
 
 ## 視窗與滑鼠
 
 桌面視窗沿用 C#／.NET 10 與 WPF，以 `WindowStyle=None`、`AllowsTransparency=true` 和透明底建立分層視窗。Windows 讓零 Alpha 像素的滑鼠事件穿透。`ShowActivated=false` 和 `WM_MOUSEACTIVATE` 回傳 `MA_NOACTIVATE`，讓角色接收點擊而保留目前的前景視窗。置頂交給 WPF `Topmost`。 [Win32 分層視窗](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#layered-windows) · [滑鼠啟用訊息](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mouseactivate)
 
-主鍵按下後才啟動短時間的計時器，追蹤實體按鍵與游標。位移超過 Windows 的拖曳門檻後，用 `SetWindowPos` 在實體像素座標移動並保留前景。短按放開時再用 `WindowFromPoint` 確認命中角色。Per-Monitor V2 用於 DPI 切換，位置依螢幕工作區限制。 [程式架構](docs/architecture.md#桌面互動與動畫)
+按下主鍵後，寵物按畫面更新節奏追蹤按鍵與游標。超過 Windows 的拖曳門檻後，用 `SetWindowPos` 在實體像素座標移動並保留前景。短按放開時用 `WindowFromPoint` 確認命中角色。Per-Monitor V2 用於跨螢幕 DPI 切換。 [程式架構](docs/architecture.md#桌面互動與動畫)
 
 ## 後續里程碑
 
-1. **設定與復原。** 保存相對工作區的錨點、螢幕、置頂和造型，實測混合 DPI、拔除螢幕和解析度變更。若需整隻角色滑鼠穿透，可一起加入通知區解除入口。
+1. **設定與復原。** 保存相對工作區的錨點、螢幕、置頂和造型，實測混合 DPI、拔除螢幕和解析度變更。
 2. **效能及相容性。** 以 `win-x64` 自包含測試包量測正式素材在 Windows 11 和 Windows 10 21H2 LTSC x64 的互動、動畫和資源使用，再評估安裝程式。 [發佈與效能門檻](docs/architecture.md#效能設計與發佈門檻) · [.NET 的 Windows 支援版本](https://learn.microsoft.com/en-us/dotnet/core/install/windows#supported-versions)
 
 養成和工作提醒保留為後續產品方向。第一版以安靜陪伴為主。

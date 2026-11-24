@@ -7,9 +7,11 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Media/Sprout.ico</ApplicationIcon>
-    <ProjectCharacterDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets\hoolheyak</ProjectCharacterDirectory>
-    <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectCharacterDirectory)\desktop-60\character.json')">$(ProjectCharacterDirectory)\desktop-60</HoolheyakPackDirectory>
-    <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == ''">$(ProjectCharacterDirectory)\desktop</HoolheyakPackDirectory>
+    <HoolheyakCharacterFolder>霍爾海雅</HoolheyakCharacterFolder>
+    <ProjectAssetsDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets</ProjectAssetsDirectory>
+    <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)\character.json')">$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)</HoolheyakPackDirectory>
+    <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\hoolheyak\desktop-60\character.json')">$(ProjectAssetsDirectory)\hoolheyak\desktop-60</HoolheyakPackDirectory>
+    <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == ''">$(ProjectAssetsDirectory)\hoolheyak\desktop</HoolheyakPackDirectory>
     <!-- WPF starts the process, so the manifest sets DPI awareness before any HWND exists. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
@@ -17,8 +19,8 @@
     <Resource Include="Media/Sprout.ico" />
   </ItemGroup>
   <ItemGroup Condition="'$(BundleHoolheyak)' == 'true'">
-    <Content Include="$(HoolheyakPackDirectory)\character.json;$(HoolheyakPackDirectory)\**\*.png"
-             Link="assets\hoolheyak\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="$(HoolheyakPackDirectory)\character.json;$(HoolheyakPackDirectory)\**\*.png;$(HoolheyakPackDirectory)\**\*.jpg;$(HoolheyakPackDirectory)\**\*.jpeg"
+             Link="assets\$(HoolheyakCharacterFolder)\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CheckHoolheyakPack" BeforeTargets="PrepareForPublish" Condition="'$(BundleHoolheyak)' == 'true'">
     <Exec Command="dotnet run --file &quot;$(MSBuildProjectDirectory)\..\..\scripts\ValidateHoolheyakPack.cs&quot; -- &quot;$(HoolheyakPackDirectory)&quot;" />

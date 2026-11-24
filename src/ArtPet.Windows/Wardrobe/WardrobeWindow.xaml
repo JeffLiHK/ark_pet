@@ -1,85 +1,156 @@
 <Window x:Class="ArtPet.Windows.Wardrobe.WardrobeWindow" x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Art Pet 衣櫃" Width="416" Height="332" MinWidth="280" MinHeight="230"
-        Background="#151B20" Foreground="#F2F5F7" FontFamily="Microsoft JhengHei UI, Segoe UI" FontSize="14"
-        PreviewKeyDown="CloseOnEscape">
+        Title="Art Pet 衣櫃" Width="454" Height="588" MinWidth="290" MinHeight="240"
+        Background="#131B20" Foreground="#F5F5EE" FontFamily="Microsoft JhengHei UI, Segoe UI" FontSize="14"
+        UseLayoutRounding="True" PreviewKeyDown="CloseOnEscape">
     <Window.Resources>
-        <Style x:Key="OutfitButton" TargetType="Button">
-            <Setter Property="Foreground" Value="#F2F5F7" />
-            <Setter Property="Background" Value="#222B33" />
-            <Setter Property="BorderBrush" Value="#566773" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <ItemsPanelTemplate x:Key="CardPanel">
+            <WrapPanel />
+        </ItemsPanelTemplate>
+        <Style x:Key="CardButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#F5F5EE" />
+            <Setter Property="Background" Value="#263137" />
+            <Setter Property="BorderBrush" Value="#495A60" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="Padding" Value="3" />
+            <Setter Property="Margin" Value="0,0,12,12" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}"
+                                CornerRadius="9" SnapsToDevicePixels="True">
+                            <ContentPresenter />
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#293640" />
+                    <Setter Property="BorderBrush" Value="#93AAA7" />
                 </Trigger>
                 <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                    <Setter Property="BorderBrush" Value="#72DDC3" />
+                    <Setter Property="BorderBrush" Value="#7EDEC3" />
                 </DataTrigger>
                 <Trigger Property="IsKeyboardFocused" Value="True">
-                    <Setter Property="BorderBrush" Value="#C3D7F7" />
-                    <Setter Property="Background" Value="#293640" />
+                    <Setter Property="BorderBrush" Value="#FFF2C2" />
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="BackButtonStyle" TargetType="Button" BasedOn="{StaticResource CardButton}">
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <RadialGradientBrush x:Key="PreviewBackground" Center="0.5,0.43" RadiusX="0.72" RadiusY="0.72">
+            <GradientStop Color="#63847C" Offset="0" />
+            <GradientStop Color="#293F40" Offset="1" />
+        </RadialGradientBrush>
+        <LinearGradientBrush x:Key="PortraitBackground" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#455A59" Offset="0" />
+            <GradientStop Color="#253236" Offset="1" />
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="PortraitCaptionShade" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#0011191D" Offset="0" />
+            <GradientStop Color="#C511191D" Offset="0.67" />
+            <GradientStop Color="#F411191D" Offset="1" />
+        </LinearGradientBrush>
+        <Style x:Key="ImageStatus" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E2EAE6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="SelectionStatus" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#D6E4DF" />
+            <Setter Property="FontSize" Value="13" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCurrent}" Value="True">
+                    <Setter Property="Foreground" Value="#9BEBCE" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding HasError}" Value="True">
+                    <Setter Property="Foreground" Value="#FFD2A1" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Status}" Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
-    <Grid Margin="16">
+    <Grid Margin="22,16,16,6">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <TextBlock x:Name="CharacterName" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,14" />
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl x:Name="Outfits" KeyboardNavigation.TabNavigation="Cycle"
-                          KeyboardNavigation.DirectionalNavigation="Cycle">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Style="{StaticResource OutfitButton}" AutomationProperties.Name="{Binding AccessibleName}"
-                                Click="ApplyOutfit" Margin="0,0,0,8">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="86" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <Border Background="#263D40" BorderBrush="#566773" BorderThickness="0,0,1,0" Height="88">
-                                    <Image Source="{Binding Preview}" Stretch="Uniform" Margin="3" />
-                                </Border>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="14,8">
-                                    <TextBlock Text="{Binding DisplayName}" FontSize="15" />
-                                    <TextBlock Text="{Binding Status}" FontSize="13" Margin="0,4,0,0">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="#B7C4CC" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                                                        <Setter Property="Foreground" Value="#72DDC3" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding HasError}" Value="True">
-                                                        <Setter Property="Foreground" Value="#FFCB8B" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+        <Border BorderBrush="#405350" BorderThickness="0,0,0,1" Padding="0,0,6,11" Margin="0,0,0,14">
+            <DockPanel LastChildFill="True">
+                <Button x:Name="BackButton" DockPanel.Dock="Right" Style="{StaticResource BackButtonStyle}"
+                        Content="‹  角色列表" Click="ShowCharacters" Visibility="Collapsed" VerticalAlignment="Center"
+                        AutomationProperties.Name="返回角色列表" />
+                <TextBlock x:Name="PageHeading" Text="選擇角色" FontSize="23" FontWeight="SemiBold"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+        </Border>
+        <ScrollViewer x:Name="CardsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <Grid>
+                <StackPanel x:Name="CharacterPage">
+                    <ItemsControl x:Name="Characters" ItemsPanel="{StaticResource CardPanel}"
+                                  KeyboardNavigation.DirectionalNavigation="Cycle">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Style="{StaticResource CardButton}" Click="ShowOutfits"
+                                        AutomationProperties.Name="{Binding AccessibleName}">
+                                    <StackPanel Width="170">
+                                        <Grid Height="170" Background="{StaticResource PreviewBackground}">
+                                            <Image Source="{Binding Preview}" Stretch="Uniform" Margin="3"
+                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                            <TextBlock Style="{StaticResource ImageStatus}" Text="{Binding PreviewStatus}" />
+                                        </Grid>
+                                        <StackPanel Margin="10,10,10,9">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="17" FontWeight="SemiBold"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Status}" Style="{StaticResource SelectionStatus}" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="CharacterListStatus" Margin="0,5,6,10" Foreground="#D6E4DF"
+                               Text="讀取角色素材…" TextWrapping="Wrap" />
+                </StackPanel>
+                <ItemsControl x:Name="Outfits" Visibility="Collapsed" ItemsPanel="{StaticResource CardPanel}"
+                              KeyboardNavigation.DirectionalNavigation="Cycle">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Style="{StaticResource CardButton}" Click="ApplyOutfit" AutomationProperties.HelpText="{Binding PortraitStatus}"
+                                    AutomationProperties.Name="{Binding AccessibleName}">
+                                <StackPanel Width="170">
+                                    <Grid Width="170" Height="170" Background="{StaticResource PreviewBackground}">
+                                        <Image Source="{Binding Preview}" Stretch="Uniform" Margin="2"
+                                               RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <TextBlock Style="{StaticResource ImageStatus}" Text="{Binding PreviewStatus}" />
+                                    </Grid>
+                                    <Grid Height="235" ClipToBounds="True" Background="{StaticResource PortraitBackground}">
+                                        <Image Source="{Binding Portrait}" Stretch="UniformToFill"
+                                               RenderOptions.BitmapScalingMode="HighQuality" />
+                                        <TextBlock Style="{StaticResource ImageStatus}" Text="{Binding PortraitStatus}" Margin="0,0,0,52" />
+                                        <Border Height="128" VerticalAlignment="Bottom" Background="{StaticResource PortraitCaptionShade}" />
+                                        <StackPanel VerticalAlignment="Bottom" Margin="12,0,12,30">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="18" FontWeight="SemiBold"
+                                                       TextWrapping="Wrap" />
+                                            <TextBlock Text="{Binding Status}" Style="{StaticResource SelectionStatus}" Margin="0,3,0,0" />
+                                        </StackPanel>
+                                    </Grid>
                                 </StackPanel>
-                            </Grid>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
     </Grid>
 </Window>

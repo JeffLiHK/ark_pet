@@ -11,6 +11,8 @@ namespace ArtPet.Windows.Media;
 
 internal sealed class CharacterPack
 {
+    private const string CharacterFolder = "霍爾海雅";
+    private const string LegacyCharacterFolder = "hoolheyak";
     private const long OutfitPixelBudget = 64L * 1024 * 1024;
     private const int MaximumOutfitFrames = 4096;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -21,31 +23,54 @@ internal sealed class CharacterPack
     {
         _directory = directory;
         _canvas = definition.Canvas;
+        Id = definition.Id;
         DisplayName = definition.DisplayName;
         Outfits = definition.Outfits;
         DefaultOutfit = Outfits.Single(outfit => outfit.Id == definition.DefaultOutfitId);
     }
 
+    internal string Id { get; }
     internal string DisplayName { get; }
     internal IReadOnlyList<OutfitDefinition> Outfits { get; }
     internal OutfitDefinition DefaultOutfit { get; }
+    internal IEnumerable<OutfitDefinition> StartupOutfits => Outfits.Where(outfit => outfit != DefaultOutfit).Prepend(DefaultOutfit);
 
     internal static IEnumerable<CharacterPack> FindInstalled()
     {
-        string localCharacter = Path.Combine(ProjectStorage.DataDirectory, "assets", "hoolheyak");
+        string bundledAssets = Path.Combine(AppContext.BaseDirectory, "assets");
+        string localAssets = Path.Combine(ProjectStorage.DataDirectory, "assets");
+        string legacyLocalCharacter = Path.Combine(localAssets, LegacyCharacterFolder);
         string[] directories =
         [
-            Path.Combine(AppContext.BaseDirectory, "assets", "hoolheyak"),
-            Path.Combine(localCharacter, "desktop-60"),
-            Path.Combine(localCharacter, "desktop")
+            Path.Combine(bundledAssets, CharacterFolder),
+            Path.Combine(bundledAssets, LegacyCharacterFolder),
+            Path.Combine(localAssets, CharacterFolder),
+            Path.Combine(legacyLocalCharacter, "desktop-60"),
+            Path.Combine(legacyLocalCharacter, "desktop")
         ];
 
-        foreach (string directory in directories)
+        var candidates = directories
+            .Concat(FindCharacterDirectories(bundledAssets))
+            .Concat(FindCharacterDirectories(localAssets))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        foreach (string directory in candidates)
         {
             if (TryOpen(directory) is { } pack)
             {
                 yield return pack;
             }
+        }
+    }
+
+    private static IEnumerable<string> FindCharacterDirectories(string assets)
+    {
+        try
+        {
+            return Directory.GetDirectories(assets).Order(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return [];
         }
     }
 
@@ -55,7 +80,8 @@ internal sealed class CharacterPack
         {
             var definition = JsonSerializer.Deserialize<CharacterDefinition>(
                 File.ReadAllText(Path.Combine(directory, "character.json")), JsonOptions);
-            if (definition is not { SchemaVersion: 1, Id: "hoolheyak", Canvas: { } canvas } ||
+            if (definition is not { SchemaVersion: 1, Canvas: { } canvas } ||
+                string.IsNullOrWhiteSpace(definition.Id) ||
                 string.IsNullOrWhiteSpace(definition.DisplayName) ||
                 canvas.Width is <= 0 or > 512 || canvas.Height is <= 0 or > 512 ||
                 canvas.AnchorX < 0 || canvas.AnchorX >= canvas.Width || canvas.AnchorY < 0 || canvas.AnchorY >= canvas.Height ||
@@ -73,6 +99,36 @@ internal sealed class CharacterPack
         {
             return null;
         }
+    }
+
+    internal OutfitDefinition? FindLoadableOutfit(CancellationToken token)
+    {
+        foreach (OutfitDefinition outfit in StartupOutfits)
+        {
+            token.ThrowIfCancellationRequested();
+            if (outfit.Idle is not { } idle || !IsValidClip(idle))
+            {
+                continue;
+            }
+
+            try
+            {
+                // Only idle is required. Validate every frame without retaining a full animation.
+                int decodeWidth = GetDecodeWidth(idle.FrameCount);
+                for (int index = 0; index < idle.FrameCount; index++)
+                {
+                    token.ThrowIfCancellationRequested();
+                    DecodeFrame(idle, index, decodeWidth);
+                }
+
+                return outfit;
+            }
+            catch (Exception error) when (IsAssetError(error))
+            {
+            }
+        }
+
+        return null;
     }
 
     internal LoadedOutfit LoadOutfit(OutfitDefinition outfit, CancellationToken cancellationToken)
@@ -96,9 +152,7 @@ internal sealed class CharacterPack
             }
         }
 
-        double decodedBytes = 4d * _canvas.Width * _canvas.Height * frameCount;
-        double decodeScale = Math.Min(1, Math.Sqrt(OutfitPixelBudget / decodedBytes));
-        int decodeWidth = Math.Max(1, (int)Math.Floor(_canvas.Width * decodeScale));
+        int decodeWidth = GetDecodeWidth(frameCount);
 
         var idleClips = new List<FrameClip>(variations.Count + 1) { DecodeClip(idleDefinition, decodeWidth, cancellationToken) };
         foreach (ClipDefinition variation in variations)
@@ -114,13 +168,36 @@ internal sealed class CharacterPack
         return new LoadedOutfit(outfit, idleClips, touch, anchor);
     }
 
+    internal BitmapSource? LoadPortrait(OutfitDefinition outfit)
+    {
+        try
+        {
+            string? portrait = outfit.Portrait;
+            if (string.IsNullOrWhiteSpace(portrait))
+            {
+                if (outfit.Idle is not { Directory: { Length: > 0 } idleDirectory })
+                {
+                    return null;
+                }
+
+                portrait = Path.Combine(Path.GetDirectoryName(idleDirectory) ?? string.Empty, "portrait.png");
+            }
+
+            return DecodeThumbnail(Resolve(portrait), 360, 720);
+        }
+        catch (Exception error) when (IsAssetError(error))
+        {
+            return null;
+        }
+    }
+
     internal BitmapSource? LoadPreview(OutfitDefinition outfit)
     {
         if (!string.IsNullOrWhiteSpace(outfit.Preview))
         {
             try
             {
-                return DecodePreview(Resolve(outfit.Preview));
+                return DecodeThumbnail(Resolve(outfit.Preview), 256, 256);
             }
             catch (Exception error) when (IsAssetError(error))
             {
@@ -130,7 +207,7 @@ internal sealed class CharacterPack
 
         try
         {
-            return outfit.Idle is { } idle ? DecodePreview(ResolveFrame(idle, 0)) : null;
+            return outfit.Idle is { } idle ? DecodeThumbnail(ResolveFrame(idle, 0), 256, 256) : null;
         }
         catch (Exception error) when (IsAssetError(error))
         {
@@ -157,40 +234,54 @@ internal sealed class CharacterPack
         }
     }
 
+    private int GetDecodeWidth(int frameCount)
+    {
+        double decodedBytes = 4d * _canvas.Width * _canvas.Height * frameCount;
+        double scale = Math.Min(1, Math.Sqrt(OutfitPixelBudget / decodedBytes));
+        return Math.Max(1, (int)Math.Floor(_canvas.Width * scale));
+    }
+
     private FrameClip DecodeClip(ClipDefinition clip, int decodeWidth, CancellationToken cancellationToken)
     {
         var frames = new BitmapSource[clip.FrameCount];
         for (int index = 0; index < frames.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            using var stream = File.OpenRead(ResolveFrame(clip, index));
-            BitmapCacheOption cache = decodeWidth == _canvas.Width ? BitmapCacheOption.OnLoad : BitmapCacheOption.None;
-            var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, cache);
-            BitmapFrame frame = decoder.Frames[0];
-            if (frame.PixelWidth != _canvas.Width || frame.PixelHeight != _canvas.Height)
-            {
-                throw new InvalidDataException("The animation frame size differs from the character canvas.");
-            }
-
-            if (decodeWidth == _canvas.Width)
-            {
-                frame.Freeze();
-                frames[index] = frame;
-            }
-            else
-            {
-                stream.Position = 0;
-                frames[index] = DecodeBitmap(stream, decodeWidth);
-            }
+            frames[index] = DecodeFrame(clip, index, decodeWidth);
         }
 
         return new FrameClip(clip.Fps, frames);
     }
 
-    private static BitmapSource DecodePreview(string file)
+    private BitmapSource DecodeFrame(ClipDefinition clip, int index, int decodeWidth)
+    {
+        using var stream = File.OpenRead(ResolveFrame(clip, index));
+        BitmapCacheOption cache = decodeWidth == _canvas.Width ? BitmapCacheOption.OnLoad : BitmapCacheOption.None;
+        var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, cache);
+        BitmapFrame frame = decoder.Frames[0];
+        if (frame.PixelWidth != _canvas.Width || frame.PixelHeight != _canvas.Height)
+        {
+            throw new InvalidDataException("The animation frame size differs from the character canvas.");
+        }
+
+        if (decodeWidth == _canvas.Width)
+        {
+            frame.Freeze();
+            return frame;
+        }
+
+        stream.Position = 0;
+        return DecodeBitmap(stream, decodeWidth);
+    }
+
+    private static BitmapSource DecodeThumbnail(string file, int maximumWidth, int maximumHeight)
     {
         using var stream = File.OpenRead(file);
-        return DecodeBitmap(stream, 112);
+        var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
+        BitmapFrame frame = decoder.Frames[0];
+        double scale = Math.Min(1, Math.Min((double)maximumWidth / frame.PixelWidth, (double)maximumHeight / frame.PixelHeight));
+        stream.Position = 0;
+        return DecodeBitmap(stream, Math.Max(1, (int)Math.Floor(frame.PixelWidth * scale)));
     }
 
     private static BitmapSource DecodeBitmap(Stream stream, int width)
@@ -231,7 +322,7 @@ internal sealed class CharacterPack
 }
 
 internal sealed record OutfitDefinition(string Id, string DisplayName, string? Preview, ClipDefinition? Idle, ClipDefinition? Touch,
-    ClipDefinition? Move, ClipDefinition? Sit, ClipDefinition? Sleep);
+    ClipDefinition? Move, ClipDefinition? Sit, ClipDefinition? Sleep, string? Portrait = null);
 
 internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount);
 

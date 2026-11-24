@@ -1,0 +1,58 @@
+<Window x:Class="ArtPet.Windows.Desktop.SettingsWindow" x:ClassModifier="internal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Art Pet 設定" Width="400" SizeToContent="Height"
+        ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen" KeyDown="CloseOnEscape"
+        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+        Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
+        FontFamily="Microsoft JhengHei UI, Segoe UI" FontSize="14" UseLayoutRounding="True">
+    <StackPanel Margin="20">
+        <TextBlock Text="變更會立即套用並自動保存。" Margin="0,0,0,12" />
+        <Border Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                BorderThickness="1" Padding="14">
+            <Grid>
+                <Grid.Resources>
+                    <Style TargetType="Label">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                    <Style TargetType="ComboBox">
+                        <Setter Property="MinHeight" Value="34" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                        <Setter Property="MaxDropDownHeight" Value="280" />
+                    </Style>
+                </Grid.Resources>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="112" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Label x:Name="SizeLabel" Content="縮放大小" Target="{Binding ElementName=SizeOptions}" />
+                <ComboBox x:Name="SizeOptions" Grid.Column="1"
+                          AutomationProperties.LabeledBy="{Binding ElementName=SizeLabel}" ItemStringFormat="{}{0}%" />
+                <Label x:Name="FrameRateLabel" Grid.Row="1" Content="動畫幀率" Margin="0,12,0,0"
+                       Target="{Binding ElementName=FrameRateOptions}" />
+                <ComboBox x:Name="FrameRateOptions" Grid.Row="1" Grid.Column="1" Margin="0,12,0,0"
+                          AutomationProperties.LabeledBy="{Binding ElementName=FrameRateLabel}" ItemStringFormat="{}{0} FPS" />
+                <StackPanel Grid.Row="2" Margin="0,12,12,0">
+                    <Label x:Name="IdleLoopsLabel" Content="待機循環次數" Target="{Binding ElementName=IdleLoopsOptions}" />
+                    <TextBlock Text="同一個待機動作的播放次數" FontSize="12" TextWrapping="Wrap" Margin="0,3,0,0" />
+                </StackPanel>
+                <ComboBox x:Name="IdleLoopsOptions" Grid.Row="2" Grid.Column="1" Margin="0,12,0,0"
+                          VerticalAlignment="Center" AutomationProperties.LabeledBy="{Binding ElementName=IdleLoopsLabel}"
+                          ItemStringFormat="{}{0} 次" />
+                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Margin="0,16,0,0">
+                    <CheckBox x:Name="InteractionModeCheckBox" Content="啟用互動模式" />
+                    <TextBlock Text="關閉後滑鼠會穿透小人。可從通知區的設定重新開啟。"
+                               FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </StackPanel>
+</Window>

@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -16,41 +19,45 @@ namespace ArtPet.Windows.Wardrobe;
 internal partial class WardrobeWindow : Window
 {
     private readonly PetSession _session;
-    private readonly Choice[] _choices;
-    private bool _closed;
+    private readonly IReadOnlyList<CharacterPack> _installedPacks;
+    private readonly ObservableCollection<CharacterChoice> _characters = [];
+    private readonly CancellationTokenSource _loading = new();
+    private OutfitChoice[] _outfits = [];
+    private Button? _lastCharacterButton;
 
-    internal WardrobeWindow(PetSession session)
+    internal WardrobeWindow(PetSession session, IReadOnlyList<CharacterPack> installedPacks)
     {
         InitializeComponent();
         _session = session;
-        _choices = session.Pack.Outfits.Select(outfit => new Choice(outfit)).ToArray();
-        CharacterName.Text = session.Pack.DisplayName;
-        Outfits.ItemsSource = _choices;
-        RefreshChoices(this, EventArgs.Empty);
+        _installedPacks = installedPacks;
+        Characters.ItemsSource = _characters;
         _session.Changed += RefreshChoices;
-        Loaded += LoadPreviews;
+        Loaded += LoadCharacters;
     }
 
     internal void ShowNear(PetWindow pet)
     {
         IntPtr petHandle = new WindowInteropHelper(pet).Handle;
+        Screen screen = Screen.FromHandle(petHandle);
+        var work = NativeMethods.GetWorkingArea(screen.Bounds.Location) ?? screen.WorkingArea;
+        double dpiScale = NativeMethods.GetDpiForWindow(petHandle) / 96d;
+        MaxWidth = Math.Max(MinWidth, work.Width / dpiScale);
+        MaxHeight = Math.Max(MinHeight, work.Height / dpiScale);
+
         IntPtr handle = new WindowInteropHelper(this).EnsureHandle();
         uint initialDpi = NativeMethods.GetDpiForWindow(handle);
-        PlaceNear(pet, petHandle, handle);
+        PlaceNear(pet, petHandle, handle, work);
         if (NativeMethods.GetDpiForWindow(handle) != initialDpi)
         {
             // A move to the pet's monitor can resize this window before it becomes visible.
-            PlaceNear(pet, petHandle, handle);
+            PlaceNear(pet, petHandle, handle, work);
         }
 
         Show();
     }
 
-    private static void PlaceNear(PetWindow pet, IntPtr petHandle, IntPtr handle)
+    private static void PlaceNear(PetWindow pet, IntPtr petHandle, IntPtr handle, System.Drawing.Rectangle work)
     {
-        Screen screen = Screen.FromHandle(petHandle);
-        var work = NativeMethods.GetWorkingArea(screen.Bounds.Location) ?? screen.WorkingArea;
-
         if (NativeMethods.GetWindowRect(handle, out var bounds) &&
             NativeMethods.GetWindowRect(petHandle, out var petBounds))
         {
@@ -76,29 +83,140 @@ internal partial class WardrobeWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
-        _closed = true;
+        _loading.Cancel();
+        _loading.Dispose();
         _session.Changed -= RefreshChoices;
         base.OnClosed(e);
     }
 
-    private async void LoadPreviews(object sender, RoutedEventArgs e)
+    private async void LoadCharacters(object sender, RoutedEventArgs e)
     {
-        Loaded -= LoadPreviews;
-        BitmapSource?[] previews = await Task.Run(() => _choices.Select(choice => _session.Pack.LoadPreview(choice.Outfit)).ToArray());
-        if (_closed)
+        Loaded -= LoadCharacters;
+        CancellationToken token = _loading.Token;
+        CharacterPack? activePack = _session.Pack;
+        if (activePack is not null && _session.Outfit is { } activeOutfit)
+        {
+            AddCharacter(new CharacterChoice(activePack, activeOutfit.Definition));
+        }
+
+        try
+        {
+            if (_characters.FirstOrDefault() is { } activeCharacter)
+            {
+                BitmapSource? preview = await Task.Run(
+                    () => LoadChibi(activeCharacter.Pack, activeCharacter.RepresentativeOutfit), token);
+                token.ThrowIfCancellationRequested();
+                activeCharacter.SetPreview(preview);
+            }
+
+            foreach (var group in _installedPacks.GroupBy(pack => pack.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                if (StringComparer.OrdinalIgnoreCase.Equals(group.Key, activePack?.Id))
+                {
+                    continue;
+                }
+
+                CharacterChoice? character = await Task.Run(() => FindCharacter(group, token), token);
+                token.ThrowIfCancellationRequested();
+                if (character is not null)
+                {
+                    AddCharacter(character);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
             return;
         }
 
-        for (int index = 0; index < _choices.Length; index++)
+        CharacterListStatus.Text = "找不到可載入的角色素材";
+        CharacterListStatus.Visibility = _characters.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static CharacterChoice? FindCharacter(IEnumerable<CharacterPack> candidates, CancellationToken token)
+    {
+        foreach (CharacterPack pack in candidates)
         {
-            _choices[index].SetPreview(previews[index]);
+            if (pack.FindLoadableOutfit(token) is { } outfit)
+            {
+                var character = new CharacterChoice(pack, outfit);
+                character.SetPreview(LoadChibi(pack, outfit));
+                return character;
+            }
+        }
+
+        return null;
+    }
+
+    private void AddCharacter(CharacterChoice character)
+    {
+        character.Refresh(_session);
+        _characters.Add(character);
+    }
+
+    private async void ShowOutfits(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: CharacterChoice character } button)
+        {
+            return;
+        }
+
+        _lastCharacterButton = button;
+        bool loadImages = character.Outfits is null;
+        _outfits = character.Outfits ??= character.Pack.Outfits.Select(outfit => new OutfitChoice(character.Pack, outfit)).ToArray();
+        Outfits.ItemsSource = _outfits;
+        RefreshChoices(this, EventArgs.Empty);
+        PageHeading.Text = character.DisplayName + "的造型";
+        CharacterPage.Visibility = Visibility.Collapsed;
+        Outfits.Visibility = Visibility.Visible;
+        BackButton.Visibility = Visibility.Visible;
+        CardsScroll.ScrollToTop();
+        BackButton.Focus();
+
+        if (!loadImages)
+        {
+            return;
+        }
+
+        CancellationToken token = _loading.Token;
+        try
+        {
+            foreach (OutfitChoice choice in character.Outfits)
+            {
+                var (preview, portrait) = await Task.Run(
+                    () => (LoadChibi(choice.Pack, choice.Outfit), choice.Pack.LoadPortrait(choice.Outfit)), token);
+                token.ThrowIfCancellationRequested();
+                choice.SetImages(preview, portrait);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
         }
     }
 
+    private void ShowCharacters(object sender, RoutedEventArgs e)
+    {
+        PageHeading.Text = "選擇角色";
+        BackButton.Visibility = Visibility.Collapsed;
+        Outfits.Visibility = Visibility.Collapsed;
+        CharacterPage.Visibility = Visibility.Visible;
+        Outfits.ItemsSource = null;
+        _outfits = [];
+        _lastCharacterButton?.Focus();
+        _lastCharacterButton?.BringIntoView();
+    }
+
+    private static BitmapSource? LoadChibi(CharacterPack pack, OutfitDefinition outfit) =>
+        WardrobePreview.CropToVisiblePixels(pack.LoadPreview(outfit));
+
     private void RefreshChoices(object? sender, EventArgs e)
     {
-        foreach (Choice choice in _choices)
+        foreach (CharacterChoice character in _characters)
+        {
+            character.Refresh(_session);
+        }
+
+        foreach (OutfitChoice choice in _outfits)
         {
             choice.Refresh(_session);
         }
@@ -106,9 +224,9 @@ internal partial class WardrobeWindow : Window
 
     private async void ApplyOutfit(object sender, RoutedEventArgs e)
     {
-        if (sender is Button { DataContext: Choice choice })
+        if (sender is Button { DataContext: OutfitChoice choice })
         {
-            await _session.SelectAsync(choice.Outfit);
+            await _session.SelectAsync(choice.Pack, choice.Outfit);
         }
     }
 
@@ -121,30 +239,63 @@ internal partial class WardrobeWindow : Window
         }
     }
 
-    private sealed class Choice(OutfitDefinition outfit) : INotifyPropertyChanged
+    private abstract class CardChoice(CharacterPack pack, string displayName) : INotifyPropertyChanged
     {
-        internal OutfitDefinition Outfit { get; } = outfit;
-        public string DisplayName => Outfit.DisplayName;
+        internal CharacterPack Pack { get; } = pack;
+        public string DisplayName { get; } = displayName;
         public BitmapSource? Preview { get; private set; }
-        public bool IsCurrent { get; private set; }
-        public bool HasError { get; private set; }
-        public string Status { get; private set; } = string.Empty;
+        public bool IsCurrent { get; protected set; }
+        public bool HasError { get; protected set; }
+        public string Status { get; protected set; } = string.Empty;
+        public string PreviewStatus => Preview is not null ? string.Empty : ImagesLoaded ? "暫無小人預覽" : "讀取中…";
         public string AccessibleName => string.IsNullOrEmpty(Status) ? DisplayName : $"{DisplayName}，{Status}";
+        protected bool ImagesLoaded { get; private set; }
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
         internal void SetPreview(BitmapSource? preview)
         {
             Preview = preview;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Preview)));
+            ImagesLoaded = true;
+            NotifyChanged();
+        }
+
+        protected void NotifyChanged() => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+    }
+
+    private sealed class CharacterChoice(CharacterPack pack, OutfitDefinition representativeOutfit)
+        : CardChoice(pack, pack.DisplayName)
+    {
+        internal OutfitDefinition RepresentativeOutfit { get; } = representativeOutfit;
+        internal OutfitChoice[]? Outfits { get; set; }
+
+        internal void Refresh(PetSession session)
+        {
+            IsCurrent = session.Pack == Pack;
+            Status = IsCurrent ? "使用中" : string.Empty;
+            NotifyChanged();
+        }
+    }
+
+    private sealed class OutfitChoice(CharacterPack pack, OutfitDefinition outfit) : CardChoice(pack, outfit.DisplayName)
+    {
+        internal OutfitDefinition Outfit { get; } = outfit;
+        public BitmapSource? Portrait { get; private set; }
+        public string PortraitStatus => Portrait is not null ? string.Empty : ImagesLoaded ? "暫無立繪" : "讀取中…";
+
+        internal void SetImages(BitmapSource? preview, BitmapSource? portrait)
+        {
+            Portrait = portrait;
+            SetPreview(preview);
         }
 
         internal void Refresh(PetSession session)
         {
-            IsCurrent = session.Outfit?.Definition == Outfit;
-            HasError = session.HasLoadError(Outfit);
-            Status = IsCurrent ? "使用中" : session.PendingOutfit == Outfit ? "套用中…" : HasError ? "素材無法讀取" : string.Empty;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+            IsCurrent = session.Pack == Pack && session.Outfit?.Definition == Outfit;
+            HasError = session.HasLoadError(Pack, Outfit);
+            Status = IsCurrent ? "使用中" : session.PendingSelection == (Pack, Outfit) ? "套用中…" :
+                HasError ? "素材無法讀取" : string.Empty;
+            NotifyChanged();
         }
     }
 }

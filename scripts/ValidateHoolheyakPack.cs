@@ -14,6 +14,17 @@ try
         throw new InvalidDataException("The Hoolheyak manifest has an unexpected character, schema, or default outfit.");
     }
 
+    JsonElement canvas = manifest.GetProperty("canvas");
+    int width = canvas.GetProperty("width").GetInt32();
+    int height = canvas.GetProperty("height").GetInt32();
+    int anchorX = canvas.GetProperty("anchorX").GetInt32();
+    int anchorY = canvas.GetProperty("anchorY").GetInt32();
+    if (width is <= 0 or > 512 || height is <= 0 or > 512 ||
+        anchorX < 0 || anchorX >= width || anchorY < 0 || anchorY >= height)
+    {
+        throw new InvalidDataException("The Hoolheyak canvas or anchor is outside the supported bounds.");
+    }
+
     foreach (string outfitId in new[] { "default", "winds-of-time" })
     {
         JsonElement outfit = manifest.GetProperty("outfits").EnumerateArray()

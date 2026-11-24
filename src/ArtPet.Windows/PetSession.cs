@@ -6,39 +6,39 @@ using ArtPet.Windows.Media;
 
 namespace ArtPet.Windows;
 
-internal sealed class PetSession(CharacterPack pack) : IDisposable
+internal sealed class PetSession : IDisposable
 {
     private readonly SemaphoreSlim _decodeGate = new(1);
-    private readonly HashSet<string> _failedOutfits = new(StringComparer.Ordinal);
+    private readonly HashSet<(CharacterPack Pack, string OutfitId)> _failedOutfits = [];
     private CancellationTokenSource? _request;
 
-    internal CharacterPack Pack { get; } = pack;
+    internal CharacterPack? Pack { get; private set; }
     internal LoadedOutfit? Outfit { get; private set; }
-    internal OutfitDefinition? PendingOutfit { get; private set; }
+    internal (CharacterPack Pack, OutfitDefinition Outfit)? PendingSelection { get; private set; }
     internal event EventHandler? Changed;
 
-    internal bool HasLoadError(OutfitDefinition outfit) => _failedOutfits.Contains(outfit.Id);
+    internal bool HasLoadError(CharacterPack pack, OutfitDefinition outfit) => _failedOutfits.Contains((pack, outfit.Id));
 
-    internal async Task SelectAsync(OutfitDefinition outfit)
+    internal async Task SelectAsync(CharacterPack pack, OutfitDefinition outfit)
     {
-        if (PendingOutfit == outfit)
+        if (PendingSelection == (pack, outfit))
         {
             return;
         }
 
         _request?.Cancel();
-        if (Outfit?.Definition == outfit)
+        if (Pack == pack && Outfit?.Definition == outfit)
         {
             _request = null;
-            PendingOutfit = null;
+            PendingSelection = null;
             Changed?.Invoke(this, EventArgs.Empty);
             return;
         }
 
         using var request = new CancellationTokenSource();
         _request = request;
-        PendingOutfit = outfit;
-        _failedOutfits.Remove(outfit.Id);
+        PendingSelection = (pack, outfit);
+        _failedOutfits.Remove((pack, outfit.Id));
         Changed?.Invoke(this, EventArgs.Empty);
 
         try
@@ -46,9 +46,10 @@ internal sealed class PetSession(CharacterPack pack) : IDisposable
             await _decodeGate.WaitAsync(request.Token);
             try
             {
-                LoadedOutfit loaded = await Task.Run(() => Pack.LoadOutfit(outfit, request.Token), request.Token);
+                LoadedOutfit loaded = await Task.Run(() => pack.LoadOutfit(outfit, request.Token), request.Token);
                 if (_request == request)
                 {
+                    Pack = pack;
                     Outfit = loaded;
                 }
             }
@@ -64,7 +65,7 @@ internal sealed class PetSession(CharacterPack pack) : IDisposable
         {
             if (_request == request)
             {
-                _failedOutfits.Add(outfit.Id);
+                _failedOutfits.Add((pack, outfit.Id));
             }
         }
         finally
@@ -72,7 +73,7 @@ internal sealed class PetSession(CharacterPack pack) : IDisposable
             if (_request == request)
             {
                 _request = null;
-                PendingOutfit = null;
+                PendingSelection = null;
                 Changed?.Invoke(this, EventArgs.Empty);
             }
         }
@@ -82,6 +83,6 @@ internal sealed class PetSession(CharacterPack pack) : IDisposable
     {
         _request?.Cancel();
         _request = null;
-        PendingOutfit = null;
+        PendingSelection = null;
     }
 }

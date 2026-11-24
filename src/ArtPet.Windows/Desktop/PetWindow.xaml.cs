@@ -1,14 +1,16 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using ArtPet.Windows.Media;
 using Microsoft.Win32;
 using Point = System.Drawing.Point;
-using Rectangle = System.Drawing.Rectangle;
 using Screen = System.Windows.Forms.Screen;
 using ScaleAnchor = System.Windows.Point;
 using WindowBounds = ArtPet.Windows.Desktop.NativeMethods.WindowBounds;
@@ -19,81 +21,97 @@ public partial class PetWindow : Window
 {
     private const int CornerMarginDip = 16;
     private const double DefaultSizeDip = 160;
-    private readonly DispatcherTimer _gestureTimer;
+    private static readonly TimeSpan MinimumGestureInterval = TimeSpan.FromMilliseconds(8);
+    // The resting artwork inside SproutVisual's 160 by 160 viewbox.
+    private static readonly Rect SproutArtwork = new(26 / 160.0, 34 / 160.0, 108 / 160.0, 116 / 160.0);
     private readonly FramePlayer _player;
+    private readonly PetVoicePlayer _voice;
     private HwndSource? _source;
     private IntPtr _handle;
-    private string? _monitorName;
     private bool _atPrimaryCorner = true;
     private Press? _press;
+    private DispatcherOperation? _gestureUpdate;
+    private long _lastGestureUpdate;
     private bool _dragging;
-    private PetSettings _settings = new();
+    private bool _placementCheckPending;
     private ScaleAnchor _scaleAnchor = new(0.5, 0.91);
+    private Rect _artworkBounds = SproutArtwork;
 
     public PetWindow()
     {
         InitializeComponent();
         _player = new FramePlayer(CharacterImage, Breeze);
+        _voice = new PetVoicePlayer(SetVoiceSubtitle);
+        VoiceBubble.CustomPopupPlacementCallback = PlaceVoiceBubble;
+        // An open WPF popup does not follow its placement target when the window moves.
+        LocationChanged += (_, _) => _voice.Stop();
 
-        _gestureTimer = new DispatcherTimer(DispatcherPriority.Input)
-        {
-            Interval = TimeSpan.FromMilliseconds(16)
-        };
-        _gestureTimer.Tick += PollGesture;
         IsVisibleChanged += UpdateVisibility;
 
-        foreach (int size in PetSettings.Sizes)
-        {
-            AddSettingOption(SizeSettingsItem, size, $"{size}%", () => ChooseSettings(_settings with { SizePercent = size }));
-        }
-
-        foreach (int fps in PetSettings.FrameRates)
-        {
-            AddSettingOption(FrameRateSettingsItem, fps, $"{fps} FPS", () => ChooseSettings(_settings with { AnimationFps = fps }));
-        }
-
-        ApplySettings(_settings);
+        ApplySettings(Settings);
     }
 
     internal event Action<PetSettings>? SettingsSelected;
 
+    internal PetSettings Settings { get; private set; } = new();
+
     internal void ApplySettings(PetSettings settings)
     {
-        _settings = settings;
-        UpdateSettingChecks(SizeSettingsItem, settings.SizePercent);
-        UpdateSettingChecks(FrameRateSettingsItem, settings.AnimationFps);
+        bool interactionChanged = Settings.InteractionEnabled != settings.InteractionEnabled;
+        Settings = settings;
+        if (interactionChanged)
+        {
+            ApplyInteractionMode();
+        }
+
         _player.FramesPerSecond = settings.AnimationFps;
+        _player.IdleLoopsPerAction = settings.IdleLoopsPerAction;
         PetArt.FramesPerSecond = settings.AnimationFps;
         ResizePet(DefaultSizeDip * settings.SizePercent / PetSettings.DefaultSize);
     }
 
-    private void ChooseSettings(PetSettings settings)
+    internal void ChooseSettings(PetSettings settings)
     {
         ApplySettings(settings);
         SettingsSelected?.Invoke(settings);
     }
 
-    private static void AddSettingOption(MenuItem parent, int value, string label, Action choose)
+    private void ApplyInteractionMode()
     {
-        var item = new MenuItem { Header = label, Tag = value, IsCheckable = true };
-        item.Click += (_, _) => choose();
-        parent.Items.Add(item);
-    }
+        bool enabled = Settings.InteractionEnabled;
+        ContextMenuService.SetIsEnabled(this, enabled);
 
-    private static void UpdateSettingChecks(MenuItem parent, int selection)
-    {
-        foreach (MenuItem item in parent.Items)
+        if (_handle != IntPtr.Zero)
         {
-            item.IsChecked = item.Tag is int value && value == selection;
+            NativeMethods.SetMousePassThrough(_handle, !enabled);
+        }
+
+        if (!enabled)
+        {
+            StopGesture();
+            ContextMenu.IsOpen = false;
+            _voice.Stop();
+            _player.CancelReaction();
+            PetArt.CancelReaction();
         }
     }
 
+    internal void SetVoiceCharacter(string characterId) => _voice.SetCharacter(characterId);
+
     internal void SetOutfit(LoadedOutfit outfit)
     {
+        _voice.Stop();
         _scaleAnchor = outfit.Anchor;
+        Rect artwork = ArtworkBounds.FromFrame(outfit.Idle.Frames[0]);
+        // An idle clip can start with a blank frame.
+        _artworkBounds = artwork.IsEmpty ? new Rect(0, 0, 1, 1) : artwork;
         PetArt.Stop();
         PetArt.Visibility = Visibility.Collapsed;
         _player.SetOutfit(outfit, IsVisible);
+        if (IsVisible)
+        {
+            QueuePlacementCheck();
+        }
     }
 
     internal void AddWardrobeCommand(Action open)
@@ -102,10 +120,13 @@ public partial class PetWindow : Window
         WardrobeItem.Click += (_, _) => open();
     }
 
+    internal void AddSettingsCommand(Action open) => SettingsItem.Click += (_, _) => open();
+
     public void ShowPet(bool resetPosition = false)
     {
         StopGesture();
         new WindowInteropHelper(this).EnsureHandle();
+        NativeMethods.SetMousePassThrough(_handle, !Settings.InteractionEnabled);
         if (resetPosition)
         {
             _atPrimaryCorner = true;
@@ -126,18 +147,54 @@ public partial class PetWindow : Window
         _handle = new WindowInteropHelper(this).Handle;
         _source = HwndSource.FromHwnd(_handle);
         _source.AddHook(WindowMessage);
+        NativeMethods.SetMousePassThrough(_handle, !Settings.InteractionEnabled);
         SystemEvents.DisplaySettingsChanged += DisplaySettingsChanged;
     }
 
     protected override void OnClosed(EventArgs e)
     {
         StopGesture();
+        _voice.Stop();
         PetArt.Stop();
         _player.Stop();
         SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
         _source?.RemoveHook(WindowMessage);
         _handle = IntPtr.Zero;
         base.OnClosed(e);
+    }
+
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.Property == TopmostProperty && VoiceBubble?.IsOpen == true)
+        {
+            ConfigureVoiceBubble(this, EventArgs.Empty);
+        }
+    }
+
+    private void ConfigureVoiceBubble(object? sender, EventArgs e)
+    {
+        if (PresentationSource.FromVisual(VoiceSubtitle) is HwndSource source)
+        {
+            NativeMethods.SetPassivePopup(source.Handle, Topmost);
+        }
+    }
+
+    private static CustomPopupPlacement[] PlaceVoiceBubble(Size bubbleSize, Size targetSize, ScaleAnchor offset)
+    {
+        const double gap = 6;
+        double x = (targetSize.Width - bubbleSize.Width) / 2;
+        return
+        [
+            new(new ScaleAnchor(x, -bubbleSize.Height - gap), PopupPrimaryAxis.Horizontal),
+            new(new ScaleAnchor(x, targetSize.Height + gap), PopupPrimaryAxis.Horizontal)
+        ];
+    }
+
+    private void SetVoiceSubtitle(string? subtitle)
+    {
+        VoiceSubtitle.Text = subtitle ?? string.Empty;
+        VoiceBubble.IsOpen = subtitle is not null && IsVisible;
     }
 
     private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -148,7 +205,7 @@ public partial class PetWindow : Window
             return NativeMethods.NoActivate;
         }
 
-        if (message == NativeMethods.DpiChanged ||
+        if ((message == NativeMethods.DpiChanged && _press is null) ||
             (message == NativeMethods.SettingChange && wParam == NativeMethods.SetWorkArea))
         {
             QueuePlacementCheck();
@@ -164,9 +221,18 @@ public partial class PetWindow : Window
         // WPF applies the suggested DPI size before the queued placement check runs.
         Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
-            if (_handle != IntPtr.Zero && IsVisible && _press is null)
+            if (_handle == IntPtr.Zero || !IsVisible)
+            {
+                return;
+            }
+
+            if (_press is null)
             {
                 RecoverPlacement();
+            }
+            else
+            {
+                _placementCheckPending = true;
             }
         });
     }
@@ -178,25 +244,35 @@ public partial class PetWindow : Window
             return;
         }
 
-        Screen? monitor = _atPrimaryCorner
-            ? null
-            : Screen.AllScreens.FirstOrDefault(screen => screen.DeviceName == _monitorName);
-
-        if (monitor is not null)
+        if (!_atPrimaryCorner && ArtworkOverlapsDisplay(bounds))
         {
-            MoveWithinWorkArea(monitor, GetWorkingArea(monitor), bounds, bounds.Left, bounds.Top);
             return;
         }
 
-        monitor = Screen.PrimaryScreen;
-        if (monitor is not null)
+        if (Screen.PrimaryScreen is { } primary)
         {
             // Keep the corner anchor through the DPI change if this move crosses monitors.
             _atPrimaryCorner = true;
             int margin = (int)Math.Round(CornerMarginDip * NativeMethods.GetDpiForWindow(_handle) / 96.0);
-            Rectangle work = GetWorkingArea(monitor);
-            MoveWithinWorkArea(monitor, work, bounds, work.Right - bounds.Width - margin, work.Bottom - bounds.Height - margin);
+            var work = NativeMethods.GetWorkingArea(primary.Bounds.Location) ?? primary.WorkingArea;
+            int x = Math.Max(work.Left, work.Right - bounds.Width - margin);
+            int y = Math.Max(work.Top, work.Bottom - bounds.Height - margin);
+            MovePet(bounds, x, y);
         }
+    }
+
+    private bool ArtworkOverlapsDisplay(WindowBounds bounds)
+    {
+        var artwork = new Rect(bounds.Left + _artworkBounds.X * bounds.Width,
+            bounds.Top + _artworkBounds.Y * bounds.Height,
+            _artworkBounds.Width * bounds.Width, _artworkBounds.Height * bounds.Height);
+
+        return Screen.AllScreens.Any(screen =>
+        {
+            var display = screen.Bounds;
+            return artwork.Left < display.Right && artwork.Right > display.Left &&
+                artwork.Top < display.Bottom && artwork.Bottom > display.Top;
+        });
     }
 
     private void ResizePet(double size)
@@ -207,35 +283,28 @@ public partial class PetWindow : Window
         }
 
         StopGesture();
+        _voice.Stop();
         WindowBounds previous = default;
-        Screen? monitor = !_atPrimaryCorner && NativeMethods.GetWindowRect(_handle, out previous)
-            ? Screen.AllScreens.FirstOrDefault(screen => screen.DeviceName == _monitorName)
-            : null;
+        bool keepAnchor = !_atPrimaryCorner && NativeMethods.GetWindowRect(_handle, out previous);
 
         Width = size;
         Height = size;
 
-        if (monitor is not null && NativeMethods.GetWindowRect(_handle, out WindowBounds resized))
+        if (keepAnchor && NativeMethods.GetWindowRect(_handle, out WindowBounds resized))
         {
             int x = previous.Left + (int)Math.Round((previous.Width - resized.Width) * _scaleAnchor.X);
             int y = previous.Top + (int)Math.Round((previous.Height - resized.Height) * _scaleAnchor.Y);
-            MoveWithinWorkArea(monitor, GetWorkingArea(monitor), resized, x, y);
+            MovePet(resized, x, y);
         }
-        else if (_handle != IntPtr.Zero)
+
+        if (_handle != IntPtr.Zero)
         {
             RecoverPlacement();
         }
     }
 
-    private static Rectangle GetWorkingArea(Screen monitor) =>
-        NativeMethods.GetWorkingArea(monitor.Bounds.Location) ?? monitor.WorkingArea;
-
-    private void MoveWithinWorkArea(Screen monitor, Rectangle work, WindowBounds bounds, int x, int y)
+    private void MovePet(WindowBounds bounds, int x, int y)
     {
-        x = Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - bounds.Width));
-        y = Math.Clamp(y, work.Top, Math.Max(work.Top, work.Bottom - bounds.Height));
-
-        _monitorName = monitor.DeviceName;
         if (x != bounds.Left || y != bounds.Top)
         {
             NativeMethods.MoveWindow(_handle, x, y);
@@ -244,8 +313,8 @@ public partial class PetWindow : Window
 
     private void StartGesture(object sender, MouseButtonEventArgs e)
     {
-        if (_press is not null || !NativeMethods.GetCursorPos(out Point cursor) ||
-            !NativeMethods.GetWindowRect(_handle, out WindowBounds bounds) || bounds.Width <= 0 || bounds.Height <= 0)
+        if (!Settings.InteractionEnabled || _handle == IntPtr.Zero || _press is not null ||
+            !NativeMethods.GetCursorPos(out Point cursor))
         {
             return;
         }
@@ -254,18 +323,30 @@ public partial class PetWindow : Window
         int primaryButton = NativeMethods.GetSystemMetrics(NativeMethods.SwapButton) == 0
             ? NativeMethods.LeftButton : NativeMethods.RightButton;
 
-        _press = new Press(cursor, (double)(cursor.X - bounds.Left) / bounds.Width,
-            (double)(cursor.Y - bounds.Top) / bounds.Height, primaryButton,
+        _press = new Press(cursor, primaryButton,
             NativeMethods.GetSystemMetricsForDpi(NativeMethods.DragWidth, dpi),
             NativeMethods.GetSystemMetricsForDpi(NativeMethods.DragHeight, dpi));
 
         // A background window cannot reliably capture input beyond its visible pixels.
-        _gestureTimer.Start();
+        CompositionTarget.Rendering += QueueGestureUpdate;
         e.Handled = true;
     }
 
-    private void PollGesture(object? sender, EventArgs e)
+    private void QueueGestureUpdate(object? sender, EventArgs e)
     {
+        // Moving the layered window may trigger a new render immediately. Bound the update rate.
+        if (_press is not null && _gestureUpdate is null &&
+            (_lastGestureUpdate == 0 || Stopwatch.GetElapsedTime(_lastGestureUpdate) >= MinimumGestureInterval))
+        {
+            // A move across monitors can resize the HWND. Do it outside the render callback.
+            _gestureUpdate = Dispatcher.InvokeAsync(PollGesture, DispatcherPriority.Input);
+        }
+    }
+
+    private void PollGesture()
+    {
+        _gestureUpdate = null;
+        _lastGestureUpdate = Stopwatch.GetTimestamp();
         if (_press is not { } press || !NativeMethods.GetCursorPos(out Point cursor))
         {
             StopGesture();
@@ -295,13 +376,13 @@ public partial class PetWindow : Window
         UpdateDrag(press, cursor);
         bool touched = !_dragging && NativeMethods.WindowFromPoint(cursor) == _handle;
         StopGesture();
-        RecoverPlacement();
 
         if (touched)
         {
             if (_player.HasOutfit)
             {
                 _player.React();
+                _voice.PlayRandom();
             }
             else
             {
@@ -315,21 +396,36 @@ public partial class PetWindow : Window
         _dragging |= Math.Abs(cursor.X - press.Start.X) >= press.DragWidth ||
             Math.Abs(cursor.Y - press.Start.Y) >= press.DragHeight;
 
-        if (_dragging && NativeMethods.GetWindowRect(_handle, out WindowBounds bounds))
+        if (_dragging && cursor != press.LastCursor && NativeMethods.GetWindowRect(_handle, out WindowBounds bounds))
         {
-            _atPrimaryCorner = false;
-            Screen monitor = Screen.FromPoint(cursor);
-            MoveWithinWorkArea(monitor, GetWorkingArea(monitor), bounds,
-                cursor.X - (int)Math.Round(press.GrabX * bounds.Width),
-                cursor.Y - (int)Math.Round(press.GrabY * bounds.Height));
+            // Continue from the position WPF applied if a per-monitor DPI change resized the window.
+            int x = bounds.Left + (cursor.X - press.LastCursor.X);
+            int y = bounds.Top + (cursor.Y - press.LastCursor.Y);
+            if (NativeMethods.MoveWindow(_handle, x, y, deferErase: true))
+            {
+                _atPrimaryCorner = false;
+                press.LastCursor = cursor;
+            }
         }
     }
 
     private void StopGesture()
     {
-        _gestureTimer.Stop();
+        if (_press is not null)
+        {
+            CompositionTarget.Rendering -= QueueGestureUpdate;
+        }
+
+        _gestureUpdate?.Abort();
+        _gestureUpdate = null;
+        _lastGestureUpdate = 0;
         _press = null;
         _dragging = false;
+        if (_placementCheckPending)
+        {
+            _placementCheckPending = false;
+            QueuePlacementCheck();
+        }
     }
 
     private void UpdateVisibility(object sender, DependencyPropertyChangedEventArgs e)
@@ -348,6 +444,7 @@ public partial class PetWindow : Window
         else
         {
             StopGesture();
+            _voice.Stop();
             PetArt.Stop();
             _player.Stop();
         }
@@ -355,5 +452,8 @@ public partial class PetWindow : Window
 
     private void HidePet(object sender, RoutedEventArgs e) => Hide();
 
-    private sealed record Press(Point Start, double GrabX, double GrabY, int PrimaryButton, int DragWidth, int DragHeight);
+    private sealed record Press(Point Start, int PrimaryButton, int DragWidth, int DragHeight)
+    {
+        internal Point LastCursor { get; set; } = Start;
+    }
 }

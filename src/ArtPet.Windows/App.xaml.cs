@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -15,6 +16,7 @@ public partial class App : Application
     private TrayIcon? _tray;
     private PetSession? _session;
     private WardrobeWindow? _wardrobe;
+    private SettingsWindow? _settingsWindow;
     private bool _exiting;
 
     protected override async void OnStartup(StartupEventArgs e)
@@ -41,56 +43,77 @@ public partial class App : Application
             }
         };
 
-        foreach (CharacterPack pack in CharacterPack.FindInstalled())
+        CharacterPack[] installedPacks = CharacterPack.FindInstalled().ToArray();
+        var session = new PetSession();
+        _session = session;
+        foreach (CharacterPack pack in installedPacks)
         {
-            var candidate = new PetSession(pack);
-            _session = candidate;
-            var startupOrder = pack.Outfits.Where(outfit => outfit != pack.DefaultOutfit).Prepend(pack.DefaultOutfit);
-            foreach (OutfitDefinition outfit in startupOrder)
+            foreach (OutfitDefinition outfit in pack.StartupOutfits)
             {
-                await candidate.SelectAsync(outfit);
+                await session.SelectAsync(pack, outfit);
                 if (_exiting)
                 {
                     return;
                 }
 
-                if (candidate.Outfit is not null)
+                if (session.Outfit is not null)
                 {
                     break;
                 }
             }
 
-            if (candidate.Outfit is not null)
+            if (session.Outfit is not null)
             {
                 break;
             }
-
-            candidate.Dispose();
-            _session = null;
         }
 
         Action? openWardrobe = null;
-        if (_session is { Outfit: { } displayed } session)
+        if (session is { Pack: { } currentPack, Outfit: { } displayed })
         {
+            pet.SetVoiceCharacter(currentPack.Id);
             pet.SetOutfit(displayed);
-            openWardrobe = () => OpenWardrobe(pet, session);
+            openWardrobe = () => OpenWardrobe(pet, session, installedPacks);
             pet.AddWardrobeCommand(openWardrobe);
 
             session.Changed += (_, _) =>
             {
-                if (session.Outfit is { } outfit && outfit != displayed)
+                if (session is { Pack: { } selectedPack, Outfit: { } outfit } && outfit != displayed)
                 {
                     displayed = outfit;
+                    pet.SetVoiceCharacter(selectedPack.Id);
                     pet.SetOutfit(outfit);
                 }
             };
         }
 
-        _tray = new TrayIcon(pet, () => Shutdown(), openWardrobe);
+        Action openSettings = () => OpenSettings(pet);
+        pet.AddSettingsCommand(openSettings);
+        _tray = new TrayIcon(pet, () => Shutdown(), openSettings, openWardrobe);
         pet.ShowPet();
     }
 
-    private void OpenWardrobe(PetWindow pet, PetSession session)
+    private void OpenSettings(PetWindow pet)
+    {
+        if (_settingsWindow is { } open)
+        {
+            if (open.WindowState == WindowState.Minimized)
+            {
+                open.WindowState = WindowState.Normal;
+            }
+
+            open.Activate();
+            return;
+        }
+
+        var settingsWindow = new SettingsWindow(pet.Settings);
+        _settingsWindow = settingsWindow;
+        settingsWindow.SettingsSelected += pet.ChooseSettings;
+        settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        settingsWindow.Show();
+    }
+
+    private void OpenWardrobe(PetWindow pet, PetSession session, IReadOnlyList<CharacterPack> installedPacks)
     {
         if (_wardrobe is { } open)
         {
@@ -103,7 +126,7 @@ public partial class App : Application
             return;
         }
 
-        var wardrobe = new WardrobeWindow(session);
+        var wardrobe = new WardrobeWindow(session, installedPacks);
         _wardrobe = wardrobe;
         wardrobe.Closed += (_, _) => _wardrobe = null;
         wardrobe.ShowNear(pet);

@@ -3,15 +3,19 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace ArtPet.Windows.Media;
 
 internal sealed class FramePlayer
 {
+    private const double ActionTransitionSeconds = 0.16;
+    private const double TouchTransitionSeconds = 0.10;
     private readonly Image _image;
     private readonly FrameworkElement _breeze;
     private LoadedOutfit? _outfit;
     private FrameClip? _clip;
+    private FrameTransition? _transition;
     private long _started;
     private long? _breezeStarted;
     private bool _playingTouch;
@@ -26,15 +30,30 @@ internal sealed class FramePlayer
 
     internal bool HasOutfit => _outfit is not null;
     internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
+    internal int IdleLoopsPerAction { get; set; } = PetSettings.DefaultIdleLoopsPerAction;
+
+    internal void CancelReaction()
+    {
+        _breezeStarted = null;
+        _breeze.Opacity = 0;
+        if (_playingTouch)
+        {
+            Stop();
+            Start();
+        }
+    }
 
     internal void SetOutfit(LoadedOutfit outfit, bool visible)
     {
         Stop();
         _outfit = outfit;
-        _image.Source = outfit.Idle.Frames[0];
         if (visible)
         {
             Start();
+        }
+        else
+        {
+            _image.Source = outfit.Idle.Frames[0];
         }
     }
 
@@ -43,7 +62,7 @@ internal sealed class FramePlayer
         if (_clip is null && _outfit is { } outfit)
         {
             _idleClipIndex = 0;
-            BeginClip(outfit.Idle, playingTouch: false);
+            BeginClip(outfit.Idle, playingTouch: false, Stopwatch.GetTimestamp());
             CompositionTarget.Rendering += UpdateFrame;
         }
     }
@@ -56,9 +75,11 @@ internal sealed class FramePlayer
         }
 
         _clip = null;
+        _transition = null;
         _playingTouch = false;
         _breezeStarted = null;
         _breeze.Opacity = 0;
+        _image.Source = _outfit?.Idle.Frames[0];
     }
 
     internal void React()
@@ -68,36 +89,44 @@ internal sealed class FramePlayer
             return;
         }
 
+        long now = Stopwatch.GetTimestamp();
         if (_outfit.Touch is { } touch)
         {
-            BeginClip(touch, playingTouch: true);
+            BeginClip(touch, playingTouch: true, now);
         }
         else
         {
-            _breezeStarted = Stopwatch.GetTimestamp();
+            _breezeStarted = now;
             _breeze.Opacity = 1;
         }
     }
 
-    private void BeginClip(FrameClip clip, bool playingTouch)
+    private void BeginClip(FrameClip clip, bool playingTouch, long now)
     {
+        if (_clip is not null && _image.Source is BitmapSource outgoing)
+        {
+            double duration = _playingTouch || playingTouch ? TouchTransitionSeconds : ActionTransitionSeconds;
+            // Leave time for even very short clips to reach full opacity.
+            duration = Math.Min(duration, (double)clip.Frames.Length / clip.Fps / 3);
+            (_transition ??= new FrameTransition(outgoing)).Begin(outgoing, now, duration);
+        }
+        else
+        {
+            _image.Source = clip.Frames[0];
+        }
+
         _clip = clip;
         _index = 0;
         _playingTouch = playingTouch;
-        _started = Stopwatch.GetTimestamp();
-        _image.Source = clip.Frames[0];
+        _started = now;
     }
 
-    private void BeginNextIdleClip(LoadedOutfit outfit)
+    private void BeginNextIdleClip(LoadedOutfit outfit, long now)
     {
         int count = outfit.IdleClips.Count;
-        if (count > 1)
-        {
-            // Pick uniformly from the other idle clips to avoid consecutive repeats.
-            _idleClipIndex = (_idleClipIndex + Random.Shared.Next(1, count)) % count;
-        }
-
-        BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false);
+        // Pick uniformly from the other idle clips to avoid consecutive repeats.
+        _idleClipIndex = (_idleClipIndex + Random.Shared.Next(1, count)) % count;
+        BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
     }
 
     private void UpdateFrame(object? sender, EventArgs e)
@@ -107,27 +136,41 @@ internal sealed class FramePlayer
             return;
         }
 
+        long now = Stopwatch.GetTimestamp();
         if (_breezeStarted is { } start)
         {
-            _breeze.Opacity = Math.Max(0, 1 - Stopwatch.GetElapsedTime(start).TotalMilliseconds / 500);
+            _breeze.Opacity = Math.Max(0, 1 - Stopwatch.GetElapsedTime(start, now).TotalMilliseconds / 500);
             if (_breeze.Opacity == 0)
             {
                 _breezeStarted = null;
             }
         }
 
-        double elapsed = Stopwatch.GetElapsedTime(_started).TotalSeconds;
-        if (elapsed >= (double)clip.Frames.Length / clip.Fps && (_playingTouch || outfit.IdleClips.Count > 1))
+        int frameCount = clip.Frames.Length;
+        double elapsedSourceFrames = Stopwatch.GetElapsedTime(_started, now).TotalSeconds * clip.Fps;
+        if (_playingTouch && elapsedSourceFrames >= frameCount)
         {
-            BeginNextIdleClip(outfit);
+            BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
+            return;
+        }
+
+        if (!_playingTouch && outfit.IdleClips.Count > 1 && elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
+        {
+            BeginNextIdleClip(outfit, now);
             return;
         }
 
         int playbackRate = Math.Min(FramesPerSecond, clip.Fps);
-        long displayedFrame = (long)(elapsed * playbackRate);
-        long sourceFrame = displayedFrame * clip.Fps / playbackRate;
-        int index = (int)(sourceFrame % clip.Frames.Length);
-        if (index != _index)
+        // Sample each loop from its first frame, including clips with an odd frame count at half rate.
+        double sourceFramesInLoop = elapsedSourceFrames % frameCount;
+        int displayedFrame = (int)(sourceFramesInLoop * playbackRate / clip.Fps);
+        int index = displayedFrame * clip.Fps / playbackRate;
+        if (_transition is { IsActive: true } transition)
+        {
+            _index = index;
+            _image.Source = transition.Blend(clip.Frames[index], now);
+        }
+        else if (index != _index)
         {
             _index = index;
             _image.Source = clip.Frames[index];

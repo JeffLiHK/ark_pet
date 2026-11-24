@@ -10,12 +10,17 @@ internal sealed record PetSettings
 {
     internal const int DefaultSize = 100;
     internal const int DefaultAnimationFps = 30;
+    internal const int DefaultIdleLoopsPerAction = 12;
+    internal const int MinIdleLoopsPerAction = 1;
+    internal const int MaxIdleLoopsPerAction = 100;
     internal static ReadOnlySpan<int> Sizes => [75, DefaultSize, 125];
     internal static ReadOnlySpan<int> FrameRates => [DefaultAnimationFps, 60];
 
     public int SchemaVersion { get; init; } = 1;
     public int SizePercent { get; init; } = DefaultSize;
     public int AnimationFps { get; init; } = DefaultAnimationFps;
+    public int IdleLoopsPerAction { get; init; } = DefaultIdleLoopsPerAction;
+    public bool InteractionEnabled { get; init; } = true;
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? OtherSettings { get; init; }
@@ -37,7 +42,10 @@ internal sealed class PetSettingsStore(string filePath)
                 return settings with
                 {
                     SizePercent = PetSettings.Sizes.Contains(settings.SizePercent) ? settings.SizePercent : PetSettings.DefaultSize,
-                    AnimationFps = PetSettings.FrameRates.Contains(settings.AnimationFps) ? settings.AnimationFps : PetSettings.DefaultAnimationFps
+                    AnimationFps = PetSettings.FrameRates.Contains(settings.AnimationFps) ? settings.AnimationFps : PetSettings.DefaultAnimationFps,
+                    IdleLoopsPerAction = settings.IdleLoopsPerAction is >= PetSettings.MinIdleLoopsPerAction and <= PetSettings.MaxIdleLoopsPerAction
+                        ? settings.IdleLoopsPerAction
+                        : PetSettings.DefaultIdleLoopsPerAction
                 };
             }
 

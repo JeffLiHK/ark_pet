@@ -9,10 +9,7 @@
     <Window.ContextMenu>
         <ContextMenu>
             <MenuItem x:Name="WardrobeItem" Header="衣櫃…" Visibility="Collapsed" />
-            <MenuItem Header="設定">
-                <MenuItem x:Name="SizeSettingsItem" Header="縮放大小" />
-                <MenuItem x:Name="FrameRateSettingsItem" Header="動畫幀率" />
-            </MenuItem>
+            <MenuItem x:Name="SettingsItem" Header="設定…" />
             <MenuItem Header="置頂" IsCheckable="True"
                       IsChecked="{Binding PlacementTarget.Topmost, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=TwoWay}" />
             <MenuItem Header="隱藏小人" Click="HidePet" />
@@ -24,5 +21,12 @@
         <Path x:Name="Breeze" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
               Stroke="#A8EFD5" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
               Data="M0,11 Q22,22 50,3 M17,22 Q34,27 58,12" />
+        <Popup x:Name="VoiceBubble" Placement="Custom" PlacementTarget="{Binding ElementName=CharacterImage}"
+               AllowsTransparency="True" IsHitTestVisible="False" Opened="ConfigureVoiceBubble">
+            <Border MaxWidth="320" Padding="12,8" Background="#F2262530" CornerRadius="10">
+                <TextBlock x:Name="VoiceSubtitle" Foreground="White" TextWrapping="Wrap" TextAlignment="Center"
+                           FontSize="14" Language="ja-JP" />
+            </Border>
+        </Popup>
     </Grid>
 </Window>
