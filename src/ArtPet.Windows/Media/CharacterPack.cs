@@ -32,7 +32,7 @@ internal sealed class CharacterPack
 
     internal static IEnumerable<CharacterPack> FindInstalled()
     {
-        string localCharacter = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ArtPet", "assets", "hoolheyak");
+        string localCharacter = Path.Combine(ProjectStorage.DataDirectory, "assets", "hoolheyak");
         string[] directories =
         [
             Path.Combine(AppContext.BaseDirectory, "assets", "hoolheyak"),

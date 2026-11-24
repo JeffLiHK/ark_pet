@@ -4,9 +4,7 @@ Art Pet 啟動後，霍爾海雅會在主螢幕工作列附近待機。短按她
 
 ## 啟動與操作
 
-直接開啟本機測試包的 `artifacts/ArtPet-win-x64/ArtPet.Windows.exe`。這個自包含 Windows x64 資料夾已有兩套造型及執行環境。
-
-日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先使用 `%LOCALAPPDATA%\ArtPet\assets\hoolheyak\desktop-60` 的素材。舊版 `desktop` 資料夾仍可載入，素材缺失時會顯示原創的「小芽」。
+日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先使用專案內 `local-data/assets/hoolheyak/desktop-60` 的素材。舊版 `desktop` 資料夾仍可載入，素材缺失時會顯示原創的「小芽」。
 
 ```powershell
 dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
@@ -14,7 +12,7 @@ dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
 
 - 畫布預設為 160 DIP，在主螢幕工作區右下角，離右邊及底部各 16 DIP，並置頂。
 - 短按角色會播放一次互動，連點會沿用當前反應。按住可拖曳，右鍵選單可打開衣櫃、切換置頂或隱藏角色。
-- 在右鍵選單的「設定」可選 75%、100%、125% 縮放及 30、60 FPS。預設為 100% 和 30 FPS。兩項會立即套用並保存到 `%LOCALAPPDATA%\ArtPet\settings.json`。
+- 在右鍵選單的「設定」可選 75%、100%、125% 縮放及 30、60 FPS。預設為 100% 和 30 FPS。兩項會立即套用並保存到專案內的 `local-data/settings.json`。
 - 從工作列通知區的 **Art Pet** 圖示也可開衣櫃、顯示、隱藏、切換置頂、移回主螢幕右下角或結束。找不到圖示時，展開通知區的隱藏圖示。雙擊圖示會顯示角色。
 - 造型、位置、置頂及顯示狀態在當次執行期間有效。再次啟動會套用預設造型和桌面位置。同一 Windows 登入工作階段只會執行一個實例。
 
@@ -22,11 +20,13 @@ dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
 
 需要交付成品或驗證發佈版本時，再執行打包指令。
 
-兩套基建模型都使用 Spine 3.8.99，取 `Relax` 和 `Interact` 片段匯出為共用腳底錨點的 256 × 256 透明 PNG，每秒 60 格。30 FPS 模式每兩格取一格，兩種模式的動作長度相同。實際畫面更新受素材幀率、螢幕更新率和系統負載影響。預設造型取自 PRTS，「歷世流風」取自 Ark-Models。角色素材保存在 Git 儲存庫之外。含素材的測試包放在 Git 忽略的 `artifacts` 下。 [PRTS 模型索引](https://prts.wiki/w/霍尔海雅/spine) · [Ark-Models](https://github.com/isHarryh/Ark-Models)
+兩套基建模型都使用 Spine 3.8.99，取 `Relax` 和 `Interact` 片段匯出為共用腳底錨點的 256 × 256 透明 PNG，每秒 60 格。30 FPS 模式每兩格取一格，兩種模式的動作長度相同。實際畫面更新受素材幀率、螢幕更新率和系統負載影響。預設造型取自 PRTS，「歷世流風」取自 Ark-Models。原始模型、動畫影格和使用者設定都在專案的 `local-data`，由 Git 忽略。含素材的測試包放在 Git 忽略的 `artifacts` 下。 [PRTS 模型索引](https://prts.wiki/w/霍尔海雅/spine) · [Ark-Models](https://github.com/isHarryh/Ark-Models)
 
 ```powershell
 dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -p:BundleHoolheyak=true -o artifacts/ArtPet-win-x64
 ```
+
+重新打包後，可開啟 `artifacts/ArtPet-win-x64/ArtPet.Windows.exe`。自包含資料夾內有兩套造型和執行環境。如果把新版測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
 
 ## 驗收條件
 

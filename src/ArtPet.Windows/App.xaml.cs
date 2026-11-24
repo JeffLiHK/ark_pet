@@ -31,8 +31,7 @@ public partial class App : Application
         var pet = new PetWindow();
         MainWindow = pet;
         pet.Closed += (_, _) => Shutdown();
-        var settingsStore = new PetSettingsStore(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ArtPet", "settings.json"));
+        var settingsStore = new PetSettingsStore(Path.Combine(ProjectStorage.DataDirectory, "settings.json"));
         pet.ApplySettings(settingsStore.Load());
         pet.SettingsSelected += settings =>
         {
