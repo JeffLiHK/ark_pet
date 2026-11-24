@@ -306,15 +306,33 @@
             <TabItem Header="更新">
                 <StackPanel>
                     <TextBlock Text="更新" Style="{StaticResource PageTitle}" />
-                    <TextBlock x:Name="CurrentVersionText" Margin="0,0,0,12" />
-                    <WrapPanel>
-                        <Button x:Name="CheckUpdateButton" Content="檢查 GitHub 更新" Padding="12,6"
-                                Click="CheckForUpdate" />
-                        <Button x:Name="InstallUpdateButton" Content="下載並重新啟動" Padding="12,6" Margin="8,0,0,0"
-                                Visibility="Collapsed" Click="InstallUpdate" />
-                    </WrapPanel>
-                    <TextBlock x:Name="UpdateStatus" Style="{StaticResource Hint}" Margin="0,12,0,0"
-                               AutomationProperties.LiveSetting="Polite" />
+                    <Border Style="{StaticResource SettingRow}">
+                        <StackPanel>
+                            <TextBlock x:Name="CurrentVersionText" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <WrapPanel>
+                                <Button x:Name="CheckUpdateButton" Content="檢查程式更新" Padding="12,6"
+                                        Click="CheckForUpdate" />
+                                <Button x:Name="InstallUpdateButton" Content="下載並重新啟動" Padding="12,6" Margin="8,0,0,0"
+                                        Visibility="Collapsed" Click="InstallUpdate" />
+                            </WrapPanel>
+                            <TextBlock x:Name="UpdateStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                    </Border>
+                    <Border Style="{StaticResource SettingRow}">
+                        <StackPanel>
+                            <TextBlock Text="霍爾海雅美術資源" FontWeight="SemiBold" />
+                            <TextBlock x:Name="AssetVersionText" Style="{StaticResource Hint}" Margin="0,4,0,8" />
+                            <WrapPanel>
+                                <Button x:Name="CheckAssetButton" Content="檢查美術更新" Padding="12,6"
+                                        Click="CheckForAssets" />
+                                <Button x:Name="InstallAssetButton" Content="下載美術資源" Padding="12,6" Margin="8,0,0,0"
+                                        Visibility="Collapsed" Click="InstallAssets" />
+                            </WrapPanel>
+                            <TextBlock x:Name="AssetStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </TabItem>
         </TabControl>

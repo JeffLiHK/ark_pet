@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using ArtPet.Windows.Desktop;
 using ArtPet.Windows.Media;
@@ -19,6 +20,7 @@ public partial class App : Application
     private PetEntry? _primary;
     private PetSettings _settings = new();
     private CharacterPack[] _installedPacks = [];
+    private CharacterPack? _startupHoolheyak;
     private SettingsWindow? _settingsWindow;
     private bool _exiting;
 
@@ -34,7 +36,12 @@ public partial class App : Application
         }
 
         _settings = _settingsStore.Load();
-        _installedPacks = CharacterPack.FindInstalled().ToArray();
+        _installedPacks = await Task.Run(() => CharacterPack.FindInstalled(ReleaseUpdater.CurrentVersion).ToArray());
+        if (_exiting)
+        {
+            return;
+        }
+
         var session = new PetSession();
         var primary = RegisterPet(session, 0);
         _primary = primary;
@@ -61,6 +68,7 @@ public partial class App : Application
             }
         }
 
+        _startupHoolheyak = session.Pack is { Id: ManagedCharacterAssets.PackId } hoolheyak ? hoolheyak : null;
         _tray = new TrayIcon(primary.Window, ExitApplication, OpenSettings, WardrobeCommand(primary),
             () => AddPet(primary), GetTrayPets);
         primary.Window.ShowPet();
@@ -157,7 +165,7 @@ public partial class App : Application
             return;
         }
 
-        var settingsWindow = new SettingsWindow(_settings) { Icon = _primary?.Window.Icon };
+        var settingsWindow = new SettingsWindow(_settings, _startupHoolheyak) { Icon = _primary?.Window.Icon };
         _settingsWindow = settingsWindow;
         settingsWindow.SettingsSelected += settings =>
         {

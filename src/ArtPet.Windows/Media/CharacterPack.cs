@@ -11,6 +11,7 @@ namespace ArtPet.Windows.Media;
 
 internal sealed class CharacterPack
 {
+    internal const int SupportedSchemaVersion = 1;
     private const string CharacterFolder = "霍爾海雅";
     private const string LegacyCharacterFolder = "hoolheyak";
     // Keep a 250-pixel canvas for the longest bundled outfit at 125% scale on a 125% display.
@@ -20,7 +21,7 @@ internal sealed class CharacterPack
     private readonly string _directory;
     private readonly CanvasDefinition _canvas;
 
-    private CharacterPack(string directory, CharacterDefinition definition)
+    private CharacterPack(string directory, CharacterDefinition definition, AssetInstallation? installation)
     {
         _directory = directory;
         _canvas = definition.Canvas;
@@ -28,16 +29,23 @@ internal sealed class CharacterPack
         DisplayName = definition.DisplayName;
         Outfits = definition.Outfits;
         DefaultOutfit = Outfits.Single(outfit => outfit.Id == definition.DefaultOutfitId);
+        Installation = installation;
     }
 
     internal string Id { get; }
     internal string DisplayName { get; }
     internal IReadOnlyList<OutfitDefinition> Outfits { get; }
     internal OutfitDefinition DefaultOutfit { get; }
+    internal AssetInstallation? Installation { get; }
     internal IEnumerable<OutfitDefinition> StartupOutfits => Outfits.Where(outfit => outfit != DefaultOutfit).Prepend(DefaultOutfit);
 
-    internal static IEnumerable<CharacterPack> FindInstalled()
+    internal static IEnumerable<CharacterPack> FindInstalled(Version appVersion)
     {
+        foreach (CharacterPack pack in ManagedCharacterAssets.FindInstalled(appVersion))
+        {
+            yield return pack;
+        }
+
         string bundledAssets = Path.Combine(AppContext.BaseDirectory, "assets");
         string localAssets = Path.Combine(ProjectStorage.DataDirectory, "assets");
         string legacyLocalCharacter = Path.Combine(localAssets, LegacyCharacterFolder);
@@ -75,13 +83,13 @@ internal sealed class CharacterPack
         }
     }
 
-    private static CharacterPack? TryOpen(string directory)
+    internal static CharacterPack? TryOpen(string directory, AssetInstallation? installation = null)
     {
         try
         {
             var definition = JsonSerializer.Deserialize<CharacterDefinition>(
                 File.ReadAllText(Path.Combine(directory, "character.json")), JsonOptions);
-            if (definition is not { SchemaVersion: 1, Canvas: { } canvas } ||
+            if (definition is not { SchemaVersion: SupportedSchemaVersion, Canvas: { } canvas } ||
                 string.IsNullOrWhiteSpace(definition.Id) ||
                 string.IsNullOrWhiteSpace(definition.DisplayName) ||
                 canvas.Width is <= 0 or > 512 || canvas.Height is <= 0 or > 512 ||
@@ -94,11 +102,49 @@ internal sealed class CharacterPack
                 return null;
             }
 
-            return new CharacterPack(directory, definition);
+            return new CharacterPack(directory, definition, installation);
         }
         catch (Exception error) when (IsAssetError(error) || error is JsonException)
         {
             return null;
+        }
+    }
+
+    internal void ValidateForInstall(CancellationToken token)
+    {
+        var checkedClips = new HashSet<ClipDefinition>();
+        foreach (OutfitDefinition outfit in Outfits)
+        {
+            if (outfit.Idle is null)
+            {
+                throw new InvalidDataException("造型缺少待機動畫。");
+            }
+
+            int remainingFrames = MaximumOutfitFrames;
+            ClipDefinition?[] clips = [outfit.Idle, outfit.Touch, outfit.Move, outfit.Sit, outfit.Sleep];
+            foreach (ClipDefinition clip in clips.OfType<ClipDefinition>())
+            {
+                if (!IsValidClip(clip, remainingFrames))
+                {
+                    throw new InvalidDataException("造型的動畫清單無效。");
+                }
+
+                remainingFrames -= clip.FrameCount;
+                if (checkedClips.Add(clip))
+                {
+                    for (int index = 0; index < clip.FrameCount; index++)
+                    {
+                        token.ThrowIfCancellationRequested();
+                        DecodeFrame(clip, index, _canvas.Width);
+                    }
+                }
+            }
+
+            foreach (string image in new[] { outfit.Preview, outfit.Portrait }.OfType<string>())
+            {
+                token.ThrowIfCancellationRequested();
+                DecodeThumbnail(Resolve(image), 360, 720);
+            }
         }
     }
 
@@ -307,7 +353,7 @@ internal sealed class CharacterPack
 
     private string Resolve(string relativePath)
     {
-        if (Path.IsPathRooted(relativePath))
+        if (Path.IsPathRooted(relativePath) || relativePath.Contains(':'))
         {
             throw new InvalidDataException("An asset path must be relative to its character folder.");
         }

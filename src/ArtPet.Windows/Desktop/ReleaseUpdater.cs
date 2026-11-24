@@ -4,20 +4,15 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace ArtPet.Windows.Desktop;
 
-internal sealed record ReleaseUpdate(Version Version, Uri DownloadUri, byte[] Sha256, long Size);
+internal sealed record ReleaseUpdate(Version Version, ReleasePackage Package);
 internal sealed record ReleaseCheck(ReleaseUpdate? Update, string Message);
 
 internal static class ReleaseUpdater
@@ -25,13 +20,6 @@ internal static class ReleaseUpdater
     private const string Repository = "JeffLiHK/art_pet";
     private const string AssetName = "ArtPet-win-x64.zip";
     private const string ExecutableName = "ArtPet.Windows.exe";
-    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
-
-    static ReleaseUpdater()
-    {
-        Client.DefaultRequestHeaders.UserAgent.ParseAdd("ArtPet-Windows");
-        Client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
-    }
 
     internal static Version CurrentVersion { get; } = typeof(ReleaseUpdater).Assembly.GetName().Version!;
 
@@ -41,16 +29,13 @@ internal static class ReleaseUpdater
 
     internal static async Task<ReleaseCheck> CheckAsync(CancellationToken token)
     {
-        using HttpResponseMessage response = await Client.GetAsync(
-            $"https://api.github.com/repos/{Repository}/releases/latest", token);
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        GitHubRelease? release = await GitHubReleaseSource.GetLatestAsync(Repository, token);
+        if (release is null)
         {
             return new(null, "GitHub 目前沒有可公開讀取的正式發行版本。");
         }
 
-        response.EnsureSuccessStatusCode();
-        GitHubRelease? release = await response.Content.ReadFromJsonAsync<GitHubRelease>(token);
-        if (release?.Tag is not { } tag || ReadTagVersion(tag) is not { } version)
+        if (release.Tag is not { } tag || ReadTagVersion(tag) is not { } version)
         {
             return new(null, "GitHub 發行標籤的版本格式無法辨識。");
         }
@@ -60,21 +45,14 @@ internal static class ReleaseUpdater
             return new(null, "已是最新版本。");
         }
 
-        GitHubAsset? asset = release.Assets?.FirstOrDefault(asset => asset.Name == AssetName);
-        if (asset is not { Size: > 0, Digest: { Length: 71 } digest } ||
-            !digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) ||
-            !digest[7..].All(char.IsAsciiHexDigit) ||
-            !Uri.TryCreate(asset.Download, UriKind.Absolute, out Uri? uri) ||
-            uri.Scheme != Uri.UriSchemeHttps || uri.Host != "github.com" ||
-            !uri.AbsolutePath.StartsWith($"/{Repository}/releases/download/", StringComparison.OrdinalIgnoreCase) ||
-            !uri.AbsolutePath.EndsWith("/" + AssetName, StringComparison.Ordinal))
+        if (GitHubReleaseSource.FindPackage(Repository, release, AssetName) is not { } package)
         {
             return new(null, $"已發行 {version.ToString(3)}，但 GitHub 尚未提供可驗證的 Windows x64 更新包。");
         }
 
         string message = CanInstall ? $"發現新版本 {version.ToString(3)}。" :
             $"發現新版本 {version.ToString(3)}。請使用 Windows x64 發佈版安裝更新。";
-        return new(new(version, uri, Convert.FromHexString(digest[7..]), asset.Size), message);
+        return new(new(version, package), message);
     }
 
     private static Version? ReadTagVersion(string tag)
@@ -102,32 +80,9 @@ internal static class ReleaseUpdater
         {
             Directory.CreateDirectory(staging);
             string archive = Path.Combine(staging, AssetName);
-            using var downloadTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
-            downloadTimeout.CancelAfter(TimeSpan.FromMinutes(15));
-            using (HttpResponseMessage response = await Client.GetAsync(
-                update.DownloadUri, HttpCompletionOption.ResponseHeadersRead, downloadTimeout.Token))
+            await using (FileStream file = File.Create(archive))
             {
-                response.EnsureSuccessStatusCode();
-                await using Stream source = await response.Content.ReadAsStreamAsync(downloadTimeout.Token);
-                await using FileStream file = File.Create(archive);
-                byte[] buffer = new byte[81920];
-                long total = 0;
-                int read;
-                while ((read = await source.ReadAsync(buffer, downloadTimeout.Token)) > 0)
-                {
-                    total += read;
-                    if (total > update.Size)
-                    {
-                        throw new InvalidDataException("更新包大小與 GitHub 發行資料不符。");
-                    }
-
-                    await file.WriteAsync(buffer.AsMemory(0, read), downloadTimeout.Token);
-                }
-
-                if (total != update.Size)
-                {
-                    throw new InvalidDataException("更新包下載不完整。");
-                }
+                await GitHubReleaseSource.DownloadAsync(update.Package, file, token);
             }
 
             await Task.Run(() => PreparePackage(archive, staging, update, token), token);
@@ -152,14 +107,6 @@ internal static class ReleaseUpdater
 
     private static void PreparePackage(string archive, string staging, ReleaseUpdate update, CancellationToken token)
     {
-        using (FileStream file = File.OpenRead(archive))
-        {
-            if (!CryptographicOperations.FixedTimeEquals(SHA256.HashData(file), update.Sha256))
-            {
-                throw new InvalidDataException("更新包的 SHA-256 驗證失敗。");
-            }
-        }
-
         string payload = Path.Combine(staging, "payload");
         Directory.CreateDirectory(payload);
         string payloadPrefix = payload + Path.DirectorySeparatorChar;
@@ -236,8 +183,4 @@ internal static class ReleaseUpdater
         info.Environment["ARTPET_UPDATE_PROCESS"] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         using Process installer = Process.Start(info) ?? throw new Win32Exception("Unable to start the updater.");
     }
-
-    private sealed record GitHubRelease([property: JsonPropertyName("tag_name")] string? Tag, GitHubAsset[]? Assets);
-    private sealed record GitHubAsset(string Name, long Size, string? Digest,
-        [property: JsonPropertyName("browser_download_url")] string? Download);
 }
