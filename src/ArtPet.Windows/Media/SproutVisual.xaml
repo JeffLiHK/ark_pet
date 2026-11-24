@@ -1,0 +1,58 @@
+<UserControl x:Class="ArtPet.Windows.Media.SproutVisual"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Focusable="False" Cursor="Hand">
+    <Viewbox Stretch="Uniform">
+        <Canvas Width="160" Height="160">
+            <Canvas x:Name="Sprout" Width="160" Height="160" RenderTransformOrigin="0.5,0.91">
+                <Canvas.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="Breath" />
+                        <TranslateTransform x:Name="Hop" />
+                    </TransformGroup>
+                </Canvas.RenderTransform>
+
+                <Path Fill="#3BAF91" Stroke="#213C37" StrokeThickness="3" StrokeLineJoin="Round"
+                      Data="M80,70 C79,53 85,38 108,36 C111,52 97,66 80,70Z" />
+                <Path Fill="#82E1B2" Stroke="#213C37" StrokeThickness="3" StrokeLineJoin="Round"
+                      Data="M80,69 C65,66 53,54 54,39 C70,37 82,48 80,69Z" />
+                <Path Stroke="#C0F3D6" StrokeThickness="2" StrokeStartLineCap="Round" Data="M62,45 Q71,49 75,57" />
+
+                <Path Fill="#429D82" Stroke="#213C37" StrokeThickness="3"
+                      Data="M54,130 C53,138 58,148 67,148 C76,148 79,141 80,135 C83,143 87,149 97,148 C106,147 110,138 105,130Z" />
+                <Path Stroke="#213C37" StrokeThickness="3" StrokeLineJoin="Round"
+                      Data="M79,64 C108,64 131,86 132,111 C134,131 113,139 80,139 C47,139 27,131 28,111 C29,85 50,64 79,64Z">
+                    <Path.Fill>
+                        <LinearGradientBrush StartPoint="0.3,0" EndPoint="0.7,1">
+                            <GradientStop Color="#9CEECC" />
+                            <GradientStop Color="#4EB797" Offset="1" />
+                        </LinearGradientBrush>
+                    </Path.Fill>
+                </Path>
+                <Path Fill="#FFF4CF" Data="M80,91 C104,91 119,107 116,120 C112,131 94,133 80,133 C65,133 48,130 45,120 C41,107 56,91 80,91Z" />
+                <Path Stroke="#D2F7E7" StrokeThickness="2.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      Data="M43,93 Q49,83 58,79" />
+
+                <Ellipse Canvas.Left="51" Canvas.Top="111" Width="11" Height="6" Fill="#ECBA9D" />
+                <Ellipse Canvas.Left="98" Canvas.Top="111" Width="11" Height="6" Fill="#ECBA9D" />
+                <Canvas x:Name="Eyes" Canvas.Left="64" Canvas.Top="102" Width="32" Height="8" RenderTransformOrigin="0.5,0.5">
+                    <Canvas.RenderTransform>
+                        <ScaleTransform x:Name="Blink" />
+                    </Canvas.RenderTransform>
+                    <Ellipse Width="5" Height="8" Fill="#263C36" />
+                    <Ellipse Canvas.Left="27" Width="5" Height="8" Fill="#263C36" />
+                </Canvas>
+                <Path x:Name="Smile" Stroke="#263C36" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                      Data="M76,113 Q80,118 84,113" />
+                <Path x:Name="HappySmile" Fill="#87584D" Stroke="#263C36" StrokeThickness="1.4" Visibility="Collapsed"
+                      Data="M74,111 Q80,115 86,111 C84,122 76,122 74,111Z" />
+            </Canvas>
+            <Canvas x:Name="Sparkles" Opacity="0" IsHitTestVisible="False">
+                <Path Fill="#F4C872" Stroke="#5F4B38" StrokeThickness="1.3" StrokeLineJoin="Round"
+                      Data="M22,37 Q23,47 32,49 Q23,50 22,60 Q21,50 12,49 Q21,47 22,37Z" />
+                <Path Fill="#A8EFD5" Stroke="#365548" StrokeThickness="1.3" StrokeLineJoin="Round"
+                      Data="M133,21 Q134,29 141,30 Q134,32 133,40 Q132,32 125,30 Q132,29 133,21Z" />
+            </Canvas>
+        </Canvas>
+    </Viewbox>
+</UserControl>

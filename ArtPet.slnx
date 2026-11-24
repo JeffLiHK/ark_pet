@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ArtPet.Windows/ArtPet.Windows.csproj" />
+  </Folder>
+</Solution>
