@@ -46,7 +46,7 @@ try
 
     return 0;
 }
-catch (Exception error) when (error is IOException or UnauthorizedAccessException or FormatException or
+catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or FormatException or
     JsonException or InvalidOperationException or KeyNotFoundException or ArgumentException)
 {
     Console.Error.WriteLine(error.Message);

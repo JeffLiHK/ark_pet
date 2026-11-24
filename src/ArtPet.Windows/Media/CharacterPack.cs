@@ -130,7 +130,7 @@ internal sealed class CharacterPack
         }
     }
 
-    internal static bool IsAssetError(Exception error) => error is IOException or UnauthorizedAccessException or
+    internal static bool IsAssetError(Exception error) => error is IOException or InvalidDataException or UnauthorizedAccessException or
         FormatException or NotSupportedException or ArgumentException or InvalidOperationException;
 
     private static bool IsValidClip(ClipDefinition? clip, int maximumFrames = MaximumOutfitFrames) =>
