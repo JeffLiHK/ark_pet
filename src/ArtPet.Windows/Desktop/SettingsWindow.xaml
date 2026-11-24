@@ -239,6 +239,9 @@
                     <CheckBox x:Name="InteractionModeCheckBox" Content="啟用互動模式"
                               Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" />
                     <TextBlock Text="關閉後滑鼠會穿透小人。可從通知區的設定重新開啟。" Style="{StaticResource Hint}" />
+                    <CheckBox x:Name="FreeModeCheckBox" Content="自由模式"
+                              Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" />
+                    <TextBlock Text="有行走動畫的小人會在目前螢幕的工作區自行走動。" Style="{StaticResource Hint}" />
                     <CheckBox x:Name="StartupCheckBox" Content="登入 Windows 時啟動 Art Pet"
                               Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" Click="ChangeStartup" />
                     <TextBlock x:Name="StartupStatus" Style="{StaticResource Hint}" Visibility="Collapsed" />

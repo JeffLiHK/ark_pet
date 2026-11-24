@@ -16,6 +16,7 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
     private MediaPlayer? _player;
     private long _playRequest;
     private double _volume = 1;
+    internal bool IsPlaying => _player is not null;
 
     internal void SetVolume(int percent)
     {

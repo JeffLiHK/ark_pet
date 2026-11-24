@@ -17,7 +17,7 @@ internal sealed record PetSettings
     internal const string Mandarin = "zh-CN";
     internal const string TraditionalChinese = "zh-TW";
     internal const string SubtitlesOff = "off";
-    internal static ReadOnlySpan<int> Sizes => [75, DefaultSize, 125, 150, 175, 200];
+    internal static ReadOnlySpan<int> Sizes => [25, 50, 75, DefaultSize, 125, 150, 175, 200, 225, 250, 275, 300];
     internal static ReadOnlySpan<int> FrameRates => [DefaultAnimationFps, 60];
 
     public int SchemaVersion { get; init; } = 1;
@@ -25,6 +25,7 @@ internal sealed record PetSettings
     public int AnimationFps { get; init; } = DefaultAnimationFps;
     public int IdleLoopsPerAction { get; init; } = DefaultIdleLoopsPerAction;
     public bool InteractionEnabled { get; init; } = true;
+    public bool FreeModeEnabled { get; init; }
     public int OutlineLevel { get; init; }
     public int ShadowLevel { get; init; }
     public int VoiceVolumePercent { get; init; } = 100;

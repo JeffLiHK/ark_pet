@@ -21,7 +21,7 @@ internal static class CharacterIcon
 
         foreach (BitmapSource frame in frames)
         {
-            Int32Rect bounds = ArtworkBounds.VisiblePixels(frame);
+            Int32Rect bounds = HeadBounds(frame);
             if (bounds.IsEmpty)
             {
                 continue;
@@ -47,6 +47,23 @@ internal static class CharacterIcon
         }
 
         return null;
+    }
+
+    private static Int32Rect HeadBounds(BitmapSource frame)
+    {
+        Int32Rect body = ArtworkBounds.VisiblePixels(frame);
+        if (body.IsEmpty)
+        {
+            return Int32Rect.Empty;
+        }
+
+        // Include the chin below the hair and head accessories in standing chibi previews.
+        int height = Math.Max(1, (int)Math.Round(body.Height * 0.44));
+        var upper = new CroppedBitmap(frame, new Int32Rect(body.X, body.Y, body.Width, height));
+        Int32Rect head = ArtworkBounds.VisiblePixels(upper);
+        // Keep wide accessories from shrinking the face at notification-area sizes.
+        int width = Math.Min(head.Width, Math.Max(1, (int)Math.Round(head.Height * 1.2)));
+        return new Int32Rect(body.X + head.X + (head.Width - width) / 2, body.Y + head.Y, width, head.Height);
     }
 
     internal static Icon ToTrayIcon(BitmapSource artwork)

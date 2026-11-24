@@ -30,6 +30,7 @@ public partial class PetWindow : Window
     private static readonly Rect SproutArtwork = new(26 / 160.0, 34 / 160.0, 108 / 160.0, 116 / 160.0);
     private readonly FramePlayer _player;
     private readonly PetVoicePlayer _voice;
+    private readonly int _placementSlot;
     private string? _voiceCharacterId;
     private HwndSource? _source;
     private IntPtr _handle;
@@ -42,11 +43,19 @@ public partial class PetWindow : Window
     private Rect _artworkBounds = SproutArtwork;
     private int _effectPadding;
 
-    public PetWindow()
+    public PetWindow() : this(0)
     {
+    }
+
+    internal PetWindow(int placementSlot)
+    {
+        _placementSlot = placementSlot;
         InitializeComponent();
         _player = new FramePlayer(CharacterImage, Breeze);
         _voice = new PetVoicePlayer(SetVoiceSubtitle);
+        _roamTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Background, UpdateRoaming, Dispatcher);
+        _roamTimer.Stop();
+        ContextMenu.Opened += (_, _) => PauseRoaming();
         VoiceBubble.CustomPopupPlacementCallback = PlaceVoiceBubble;
         // An open WPF popup does not follow its placement target when the window moves.
         LocationChanged += (_, _) => _voice.Stop();
@@ -56,9 +65,7 @@ public partial class PetWindow : Window
         ApplySettings(Settings);
     }
 
-    internal event Action<PetSettings>? SettingsSelected;
-
-    internal PetSettings Settings { get; private set; } = new();
+    private PetSettings Settings { get; set; } = new();
 
     internal void ApplySettings(PetSettings settings)
     {
@@ -66,6 +73,7 @@ public partial class PetWindow : Window
         bool languageChanged = Settings.VoiceLanguage != settings.VoiceLanguage ||
             Settings.SubtitleLanguage != settings.SubtitleLanguage;
         bool effectsChanged = Settings.OutlineLevel != settings.OutlineLevel || Settings.ShadowLevel != settings.ShadowLevel;
+        bool freeModeChanged = Settings.FreeModeEnabled != settings.FreeModeEnabled;
         Settings = settings;
         if (interactionChanged)
         {
@@ -87,12 +95,11 @@ public partial class PetWindow : Window
         _player.IdleLoopsPerAction = settings.IdleLoopsPerAction;
         PetArt.FramesPerSecond = settings.AnimationFps;
         ResizePet(DefaultSizeDip * settings.SizePercent / PetSettings.DefaultSize);
-    }
-
-    internal void ChooseSettings(PetSettings settings)
-    {
-        ApplySettings(settings);
-        SettingsSelected?.Invoke(settings);
+        if (freeModeChanged)
+        {
+            _player.SetFreeMode(settings.FreeModeEnabled);
+            RefreshRoaming();
+        }
     }
 
     private void ApplyArtworkEffects(int outline, int shadow)
@@ -153,6 +160,7 @@ public partial class PetWindow : Window
 
     internal void SetOutfit(LoadedOutfit outfit)
     {
+        PauseRoaming();
         _voice.Stop();
         _scaleAnchor = outfit.Anchor;
         Rect artwork = ArtworkBounds.FromFrame(outfit.Idle.Frames[0]);
@@ -161,6 +169,7 @@ public partial class PetWindow : Window
         PetArt.Stop();
         PetArt.Visibility = Visibility.Collapsed;
         _player.SetOutfit(outfit, IsVisible);
+        RefreshRoaming();
         if (IsVisible)
         {
             QueuePlacementCheck();
@@ -175,9 +184,28 @@ public partial class PetWindow : Window
 
     internal void AddSettingsCommand(Action open) => SettingsItem.Click += (_, _) => open();
 
+    internal void AddPetCommands(Action add, Action? remove)
+    {
+        AddPetItem.Click += (_, _) => add();
+        if (remove is not null)
+        {
+            RemovePetItem.Visibility = Visibility.Visible;
+            RemovePetItem.Click += (_, _) => remove();
+        }
+    }
+
+    internal void TurnAround()
+    {
+        PauseRoaming();
+        FacingTransform.ScaleX = -FacingTransform.ScaleX;
+    }
+
+    private void TurnPet(object sender, RoutedEventArgs e) => TurnAround();
+
     public void ShowPet(bool resetPosition = false)
     {
         StopGesture();
+        PauseRoaming();
         new WindowInteropHelper(this).EnsureHandle();
         NativeMethods.SetPassiveInput(_handle, !Settings.InteractionEnabled);
         if (resetPosition)
@@ -207,6 +235,7 @@ public partial class PetWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         StopGesture();
+        _roamTimer.Stop();
         _voice.Stop();
         PetArt.Stop();
         _player.Stop();
@@ -281,6 +310,7 @@ public partial class PetWindow : Window
 
             if (_press is null)
             {
+                PauseRoaming();
                 RecoverPlacement();
             }
             else
@@ -308,8 +338,11 @@ public partial class PetWindow : Window
             _atPrimaryCorner = true;
             int margin = (int)Math.Round((CornerMarginDip - _effectPadding) * NativeMethods.GetDpiForWindow(_handle) / 96.0);
             var work = NativeMethods.GetWorkingArea(primary.Bounds.Location) ?? primary.WorkingArea;
-            int x = Math.Max(work.Left, work.Right - bounds.Width - margin);
-            int y = Math.Max(work.Top, work.Bottom - bounds.Height - margin);
+            int gap = (int)Math.Round(CornerMarginDip * NativeMethods.GetDpiForWindow(_handle) / 96.0);
+            int columns = Math.Max(1, (work.Width - margin * 2 + gap) / (bounds.Width + gap));
+            int rows = Math.Max(1, (work.Height - margin * 2 + gap) / (bounds.Height + gap));
+            int x = Math.Max(work.Left, work.Right - bounds.Width - margin - _placementSlot % columns * (bounds.Width + gap));
+            int y = Math.Max(work.Top, work.Bottom - bounds.Height - margin - (_placementSlot / columns % rows) * (bounds.Height + gap));
             MovePet(bounds, x, y);
         }
     }
@@ -319,7 +352,8 @@ public partial class PetWindow : Window
         double padding = _effectPadding * NativeMethods.GetDpiForWindow(_handle) / 96.0;
         double width = bounds.Width - 2 * padding;
         double height = bounds.Height - 2 * padding;
-        var artwork = new Rect(bounds.Left + padding + _artworkBounds.X * width,
+        double artworkX = FacingTransform.ScaleX < 0 ? 1 - _artworkBounds.Right : _artworkBounds.X;
+        var artwork = new Rect(bounds.Left + padding + artworkX * width,
             bounds.Top + padding + _artworkBounds.Y * height,
             _artworkBounds.Width * width, _artworkBounds.Height * height);
 
@@ -341,6 +375,7 @@ public partial class PetWindow : Window
         }
 
         StopGesture();
+        PauseRoaming();
         _voice.Stop();
         WindowBounds previous = default;
         bool keepAnchor = !_atPrimaryCorner && NativeMethods.GetWindowRect(_handle, out previous);
@@ -354,7 +389,8 @@ public partial class PetWindow : Window
         if (keepAnchor && NativeMethods.GetWindowRect(_handle, out WindowBounds resized))
         {
             double paddingChange = (oldPadding - padding) * NativeMethods.GetDpiForWindow(_handle) / 96.0;
-            int x = previous.Left + (int)Math.Round(paddingChange + (previous.Width - resized.Width - 2 * paddingChange) * _scaleAnchor.X);
+            double anchorX = FacingTransform.ScaleX < 0 ? 1 - _scaleAnchor.X : _scaleAnchor.X;
+            int x = previous.Left + (int)Math.Round(paddingChange + (previous.Width - resized.Width - 2 * paddingChange) * anchorX);
             int y = previous.Top + (int)Math.Round(paddingChange + (previous.Height - resized.Height - 2 * paddingChange) * _scaleAnchor.Y);
             MovePet(resized, x, y);
         }
@@ -389,6 +425,7 @@ public partial class PetWindow : Window
             NativeMethods.GetSystemMetricsForDpi(NativeMethods.DragWidth, dpi),
             NativeMethods.GetSystemMetricsForDpi(NativeMethods.DragHeight, dpi));
         _press = press;
+        PauseRoaming();
 
         // Poll screen coordinates even when the pointer outruns the visible part of the window.
         _gestureTimer = new Timer(_ => QueueGestureUpdate(press), null, 0, GesturePollIntervalMs);
@@ -507,6 +544,8 @@ public partial class PetWindow : Window
             PetArt.Stop();
             _player.Stop();
         }
+
+        RefreshRoaming();
     }
 
     private void HidePet(object sender, RoutedEventArgs e) => Hide();

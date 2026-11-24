@@ -29,6 +29,7 @@ internal partial class SettingsWindow : Window
         FrameRateOptions.SelectedItem = settings.AnimationFps;
         IdleLoopsInput.Text = settings.IdleLoopsPerAction.ToString(CultureInfo.InvariantCulture);
         InteractionModeCheckBox.IsChecked = settings.InteractionEnabled;
+        FreeModeCheckBox.IsChecked = settings.FreeModeEnabled;
         VoiceOptions.SelectedValue = settings.VoiceLanguage;
         SubtitleOptions.SelectedValue = settings.SubtitleLanguage;
         VoiceVolume.Value = settings.VoiceVolumePercent;
@@ -43,6 +44,7 @@ internal partial class SettingsWindow : Window
         SizeOptions.SelectionChanged += ApplySelections;
         FrameRateOptions.SelectionChanged += ApplySelections;
         InteractionModeCheckBox.Click += ApplySelections;
+        FreeModeCheckBox.Click += ApplySelections;
         VoiceOptions.SelectionChanged += ApplySelections;
         SubtitleOptions.SelectionChanged += ApplySelections;
         OutlineOptions.SelectionChanged += ApplySelections;
@@ -64,6 +66,7 @@ internal partial class SettingsWindow : Window
                 SizePercent = size,
                 AnimationFps = frameRate,
                 InteractionEnabled = InteractionModeCheckBox.IsChecked == true,
+                FreeModeEnabled = FreeModeCheckBox.IsChecked == true,
                 OutlineLevel = OutlineOptions.SelectedIndex,
                 ShadowLevel = ShadowOptions.SelectedIndex,
                 VoiceVolumePercent = (int)VoiceVolume.Value,

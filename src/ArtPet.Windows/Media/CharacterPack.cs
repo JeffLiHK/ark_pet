@@ -156,17 +156,22 @@ internal sealed class CharacterPack
         int decodeWidth = GetDecodeWidth(frameCount);
 
         var idleClips = new List<FrameClip>(variations.Count + 1) { DecodeClip(idleDefinition, decodeWidth, cancellationToken) };
+        FrameClip? move = null;
         foreach (ClipDefinition variation in variations)
         {
             if (DecodeOptionalClip(variation, decodeWidth, cancellationToken) is { } loaded)
             {
                 idleClips.Add(loaded);
+                if (ReferenceEquals(variation, outfit.Move))
+                {
+                    move = loaded;
+                }
             }
         }
 
         FrameClip? touch = touchDefinition is null ? null : DecodeOptionalClip(touchDefinition, decodeWidth, cancellationToken);
         var anchor = new System.Windows.Point((double)_canvas.AnchorX / _canvas.Width, (double)_canvas.AnchorY / _canvas.Height);
-        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit));
+        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit), move);
     }
 
     internal BitmapSource? LoadPortrait(OutfitDefinition outfit)
@@ -323,14 +328,14 @@ internal sealed class CharacterPack
 }
 
 internal sealed record OutfitDefinition(string Id, string DisplayName, string? Preview, ClipDefinition? Idle, ClipDefinition? Touch,
-    ClipDefinition? Move, ClipDefinition? Sit, ClipDefinition? Sleep, string? Portrait = null);
+    ClipDefinition? Move, ClipDefinition? Sit, ClipDefinition? Sleep, string? Portrait = null, bool MoveFacesLeft = false);
 
 internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount);
 
 internal sealed record FrameClip(int Fps, BitmapSource[] Frames);
 
 internal sealed record LoadedOutfit(OutfitDefinition Definition, IReadOnlyList<FrameClip> IdleClips, FrameClip? Touch,
-    System.Windows.Point Anchor, BitmapSource? Preview)
+    System.Windows.Point Anchor, BitmapSource? Preview, FrameClip? Move = null)
 {
     internal FrameClip Idle => IdleClips[0];
 }

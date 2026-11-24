@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -19,6 +20,8 @@ internal sealed class FramePlayer
     private long _started;
     private long? _breezeStarted;
     private bool _playingTouch;
+    private bool _walking;
+    private bool _freeMode;
     private int _index;
     private int _idleClipIndex;
 
@@ -29,8 +32,39 @@ internal sealed class FramePlayer
     }
 
     internal bool HasOutfit => _outfit is not null;
+    internal bool CanWalk => _outfit?.Move is not null;
+    internal bool IsReacting => _playingTouch || _breezeStarted is not null;
+    internal bool MoveFacesLeft => _outfit?.Definition.MoveFacesLeft == true;
     internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
     internal int IdleLoopsPerAction { get; set; } = PetSettings.DefaultIdleLoopsPerAction;
+
+    internal void SetFreeMode(bool enabled)
+    {
+        _freeMode = enabled;
+        if (enabled && _outfit is { Move: { } move } outfit && ReferenceEquals(outfit.IdleClips[_idleClipIndex], move))
+        {
+            _idleClipIndex = 0;
+            if (!_playingTouch && _clip is not null)
+            {
+                BeginClip(outfit.Idle, playingTouch: false, Stopwatch.GetTimestamp());
+            }
+        }
+    }
+
+    internal void SetWalking(bool walking)
+    {
+        if (_walking == walking || _clip is null || _outfit is not { Move: { } move } outfit)
+        {
+            return;
+        }
+
+        _walking = walking;
+        _idleClipIndex = 0;
+        if (!_playingTouch)
+        {
+            BeginClip(walking ? move : outfit.Idle, playingTouch: false, Stopwatch.GetTimestamp());
+        }
+    }
 
     internal void CancelReaction()
     {
@@ -47,6 +81,7 @@ internal sealed class FramePlayer
     {
         Stop();
         _outfit = outfit;
+        _idleClipIndex = 0;
         if (visible)
         {
             Start();
@@ -77,6 +112,7 @@ internal sealed class FramePlayer
         _clip = null;
         _transition = null;
         _playingTouch = false;
+        _walking = false;
         _breezeStarted = null;
         _breeze.Opacity = 0;
         _image.Source = _outfit?.Idle.Frames[0];
@@ -123,10 +159,15 @@ internal sealed class FramePlayer
 
     private void BeginNextIdleClip(LoadedOutfit outfit, long now)
     {
-        int count = outfit.IdleClips.Count;
-        // Pick uniformly from the other idle clips to avoid consecutive repeats.
-        _idleClipIndex = (_idleClipIndex + Random.Shared.Next(1, count)) % count;
-        BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
+        var candidates = Enumerable.Range(0, outfit.IdleClips.Count)
+            .Where(index => index != _idleClipIndex &&
+                (!_freeMode || !ReferenceEquals(outfit.IdleClips[index], outfit.Move)))
+            .ToArray();
+        if (candidates.Length > 0)
+        {
+            _idleClipIndex = candidates[Random.Shared.Next(candidates.Length)];
+            BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
+        }
     }
 
     private void UpdateFrame(object? sender, EventArgs e)
@@ -150,11 +191,12 @@ internal sealed class FramePlayer
         double elapsedSourceFrames = Stopwatch.GetElapsedTime(_started, now).TotalSeconds * clip.Fps;
         if (_playingTouch && elapsedSourceFrames >= frameCount)
         {
-            BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
+            BeginClip(_walking && outfit.Move is { } move ? move : outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
             return;
         }
 
-        if (!_playingTouch && outfit.IdleClips.Count > 1 && elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
+        int standbyCount = outfit.IdleClips.Count - (_freeMode && outfit.Move is not null ? 1 : 0);
+        if (!_playingTouch && !_walking && standbyCount > 1 && elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
         {
             BeginNextIdleClip(outfit, now);
             return;

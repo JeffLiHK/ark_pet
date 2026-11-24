@@ -17,6 +17,9 @@ internal sealed class PetSession : IDisposable
     internal (CharacterPack Pack, OutfitDefinition Outfit)? PendingSelection { get; private set; }
     internal event EventHandler? Changed;
 
+    // Decoded frames are frozen. Each copy keeps its own selections and pending load.
+    internal PetSession Fork() => new() { Pack = Pack, Outfit = Outfit };
+
     internal bool HasLoadError(CharacterPack pack, OutfitDefinition outfit) => _failedOutfits.Contains((pack, outfit.Id));
 
     internal async Task SelectAsync(CharacterPack pack, OutfitDefinition outfit)

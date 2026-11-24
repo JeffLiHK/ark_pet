@@ -14,8 +14,11 @@ public partial class App : Application
 {
     private Mutex? _instance;
     private TrayIcon? _tray;
-    private PetSession? _session;
-    private WardrobeWindow? _wardrobe;
+    private readonly List<PetEntry> _pets = [];
+    private readonly PetSettingsStore _settingsStore = new(Path.Combine(ProjectStorage.DataDirectory, "settings.json"));
+    private PetEntry? _primary;
+    private PetSettings _settings = new();
+    private CharacterPack[] _installedPacks = [];
     private SettingsWindow? _settingsWindow;
     private bool _exiting;
 
@@ -30,23 +33,13 @@ public partial class App : Application
             return;
         }
 
-        var pet = new PetWindow();
-        MainWindow = pet;
-        pet.Closed += (_, _) => Shutdown();
-        var settingsStore = new PetSettingsStore(Path.Combine(ProjectStorage.DataDirectory, "settings.json"));
-        pet.ApplySettings(settingsStore.Load());
-        pet.SettingsSelected += settings =>
-        {
-            if (!settingsStore.TrySave(settings))
-            {
-                _tray?.ShowSettingsSaveError();
-            }
-        };
-
-        CharacterPack[] installedPacks = CharacterPack.FindInstalled().ToArray();
+        _settings = _settingsStore.Load();
+        _installedPacks = CharacterPack.FindInstalled().ToArray();
         var session = new PetSession();
-        _session = session;
-        foreach (CharacterPack pack in installedPacks)
+        var primary = RegisterPet(session, 0);
+        _primary = primary;
+        MainWindow = primary.Window;
+        foreach (CharacterPack pack in _installedPacks)
         {
             foreach (OutfitDefinition outfit in pack.StartupOutfits)
             {
@@ -68,49 +61,90 @@ public partial class App : Application
             }
         }
 
-        Action? openWardrobe = null;
-        if (session is { Pack: { } currentPack, Outfit: { } displayed })
-        {
-            DisplayOutfit(pet, currentPack, displayed);
-            openWardrobe = () => OpenWardrobe(pet, session, installedPacks);
-            pet.AddWardrobeCommand(openWardrobe);
-
-            session.Changed += (_, _) =>
-            {
-                if (session is { Pack: { } selectedPack, Outfit: { } outfit } && outfit != displayed)
-                {
-                    displayed = outfit;
-                    DisplayOutfit(pet, selectedPack, outfit);
-                }
-            };
-        }
-
-        Action openSettings = () => OpenSettings(pet);
-        pet.AddSettingsCommand(openSettings);
-        _tray = new TrayIcon(pet, () => Shutdown(), openSettings, openWardrobe);
-        pet.ShowPet();
+        _tray = new TrayIcon(primary.Window, ExitApplication, OpenSettings, WardrobeCommand(primary),
+            () => AddPet(primary), GetTrayPets);
+        primary.Window.ShowPet();
     }
 
-    private void DisplayOutfit(PetWindow pet, CharacterPack pack, LoadedOutfit outfit)
+    private PetEntry RegisterPet(PetSession session, int slot)
     {
-        pet.SetVoiceCharacter(pack.Id);
-        pet.SetOutfit(outfit);
-
-        var icon = CharacterIcon.Create(outfit);
-        pet.Icon = icon;
-        _tray?.SetCharacterIcon(icon);
-        if (_settingsWindow is { } settings)
+        var window = new PetWindow(slot);
+        var pet = new PetEntry(slot, window, session);
+        _pets.Add(pet);
+        window.ApplySettings(_settings);
+        window.AddSettingsCommand(OpenSettings);
+        window.AddPetCommands(() => AddPet(pet), slot == 0 ? null : () => RemovePet(pet));
+        if (_installedPacks.Length > 0)
         {
-            settings.Icon = icon;
+            window.AddWardrobeCommand(() => OpenWardrobe(pet));
         }
 
-        if (_wardrobe is { } wardrobe)
+        session.Changed += (_, _) => DisplayOutfit(pet);
+        window.Closed += (_, _) =>
+        {
+            _pets.Remove(pet);
+            session.Dispose();
+            if (pet == _primary)
+            {
+                ExitApplication();
+            }
+        };
+        DisplayOutfit(pet);
+        return pet;
+    }
+
+    private void AddPet(PetEntry source)
+    {
+        var occupied = _pets.Select(pet => pet.Slot).ToHashSet();
+        int slot = 1;
+        while (occupied.Contains(slot))
+        {
+            slot++;
+        }
+
+        RegisterPet(source.Session.Fork(), slot).Window.ShowPet();
+    }
+
+    private static void RemovePet(PetEntry pet)
+    {
+        pet.Wardrobe?.Close();
+        pet.Window.Close();
+    }
+
+    private Action? WardrobeCommand(PetEntry pet) => _installedPacks.Length > 0 ? () => OpenWardrobe(pet) : null;
+
+    private IEnumerable<TrayPet> GetTrayPets() => _pets.OrderBy(pet => pet.Slot).Select(pet =>
+        new TrayPet($"小人 {pet.Slot + 1} · {pet.Session.Pack?.DisplayName ?? "小芽"}", pet.Window,
+            WardrobeCommand(pet), pet == _primary ? null : () => RemovePet(pet)));
+
+    private void DisplayOutfit(PetEntry pet)
+    {
+        if (pet.Session is not { Pack: { } pack, Outfit: { } outfit } || pet.Displayed == outfit)
+        {
+            return;
+        }
+
+        pet.Displayed = outfit;
+        pet.Window.SetVoiceCharacter(pack.Id);
+        pet.Window.SetOutfit(outfit);
+        var icon = CharacterIcon.Create(outfit);
+        pet.Window.Icon = icon;
+        if (pet == _primary)
+        {
+            _tray?.SetCharacterIcon(icon);
+            if (_settingsWindow is { } settings)
+            {
+                settings.Icon = icon;
+            }
+        }
+
+        if (pet.Wardrobe is { } wardrobe)
         {
             wardrobe.Icon = icon;
         }
     }
 
-    private void OpenSettings(PetWindow pet)
+    private void OpenSettings()
     {
         if (_settingsWindow is { } open)
         {
@@ -123,16 +157,28 @@ public partial class App : Application
             return;
         }
 
-        var settingsWindow = new SettingsWindow(pet.Settings) { Icon = pet.Icon };
+        var settingsWindow = new SettingsWindow(_settings) { Icon = _primary?.Window.Icon };
         _settingsWindow = settingsWindow;
-        settingsWindow.SettingsSelected += pet.ChooseSettings;
+        settingsWindow.SettingsSelected += settings =>
+        {
+            _settings = settings;
+            foreach (PetEntry entry in _pets)
+            {
+                entry.Window.ApplySettings(settings);
+            }
+
+            if (!_settingsStore.TrySave(settings))
+            {
+                _tray?.ShowSettingsSaveError();
+            }
+        };
         settingsWindow.Closed += (_, _) => _settingsWindow = null;
         settingsWindow.Show();
     }
 
-    private void OpenWardrobe(PetWindow pet, PetSession session, IReadOnlyList<CharacterPack> installedPacks)
+    private void OpenWardrobe(PetEntry pet)
     {
-        if (_wardrobe is { } open)
+        if (pet.Wardrobe is { } open)
         {
             if (open.WindowState == WindowState.Minimized)
             {
@@ -143,18 +189,37 @@ public partial class App : Application
             return;
         }
 
-        var wardrobe = new WardrobeWindow(session, installedPacks) { Icon = pet.Icon };
-        _wardrobe = wardrobe;
-        wardrobe.Closed += (_, _) => _wardrobe = null;
-        wardrobe.ShowNear(pet);
+        var wardrobe = new WardrobeWindow(pet.Session, _installedPacks) { Icon = pet.Window.Icon };
+        pet.Wardrobe = wardrobe;
+        wardrobe.Closed += (_, _) => pet.Wardrobe = null;
+        wardrobe.ShowNear(pet.Window);
+    }
+
+    private void ExitApplication()
+    {
+        if (!_exiting)
+        {
+            _exiting = true;
+            Shutdown();
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _exiting = true;
-        _session?.Dispose();
+        foreach (PetEntry pet in _pets)
+        {
+            pet.Session.Dispose();
+        }
+
         _tray?.Dispose();
         _instance?.Dispose();
         base.OnExit(e);
+    }
+
+    private sealed record PetEntry(int Slot, PetWindow Window, PetSession Session)
+    {
+        internal LoadedOutfit? Displayed { get; set; }
+        internal WardrobeWindow? Wardrobe { get; set; }
     }
 }

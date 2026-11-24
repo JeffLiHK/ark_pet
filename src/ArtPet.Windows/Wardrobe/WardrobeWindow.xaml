@@ -106,8 +106,11 @@
                                         AutomationProperties.HelpText="{Binding PortraitStatus}">
                                     <StackPanel Width="170">
                                         <Grid Height="235" Background="{StaticResource PortraitBackground}" ClipToBounds="True">
-                                            <Image Source="{Binding Portrait}" Stretch="Uniform"
-                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                            <Rectangle RenderOptions.BitmapScalingMode="HighQuality">
+                                                <Rectangle.Fill>
+                                                    <ImageBrush ImageSource="{Binding Portrait}" Stretch="UniformToFill" AlignmentY="Top" />
+                                                </Rectangle.Fill>
+                                            </Rectangle>
                                             <TextBlock Style="{StaticResource ImageStatus}" Text="{Binding PortraitStatus}" />
                                         </Grid>
                                         <StackPanel Margin="10,10,10,9">

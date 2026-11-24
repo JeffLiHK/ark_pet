@@ -11,6 +11,9 @@
         <ContextMenu>
             <MenuItem x:Name="WardrobeItem" Header="衣櫃…" Visibility="Collapsed" />
             <MenuItem x:Name="SettingsItem" Header="設定…" />
+            <MenuItem Header="轉身" Click="TurnPet" />
+            <MenuItem x:Name="AddPetItem" Header="新增一隻小人" />
+            <MenuItem x:Name="RemovePetItem" Header="移除這隻小人" Visibility="Collapsed" />
             <MenuItem Header="置頂" IsCheckable="True"
                       IsChecked="{Binding PlacementTarget.Topmost, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=TwoWay}" />
             <MenuItem Header="隱藏小人" Click="HidePet" />
@@ -19,7 +22,10 @@
     <Grid>
         <Grid x:Name="ArtworkCanvas">
             <Grid x:Name="ShadowLayer">
-                <Grid x:Name="OutlineLayer">
+                <Grid x:Name="OutlineLayer" RenderTransformOrigin="0.5,0.5">
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="FacingTransform" />
+                    </Grid.RenderTransform>
                     <media:SproutVisual x:Name="PetArt" />
                     <Image x:Name="CharacterImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" />
                 </Grid>
@@ -28,7 +34,7 @@
                   Stroke="#A8EFD5" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
                   Data="M0,11 Q22,22 50,3 M17,22 Q34,27 58,12" />
         </Grid>
-        <Popup x:Name="VoiceBubble" Placement="Custom" PlacementTarget="{Binding ElementName=CharacterImage}"
+        <Popup x:Name="VoiceBubble" Placement="Custom" PlacementTarget="{Binding ElementName=ArtworkCanvas}"
                AllowsTransparency="True" IsHitTestVisible="False" Opened="ConfigureVoiceBubble">
             <Border MaxWidth="320" Padding="12,8" Background="#F2262530" CornerRadius="10">
                 <TextBlock x:Name="VoiceSubtitle" Foreground="White" TextWrapping="Wrap" TextAlignment="Center"
