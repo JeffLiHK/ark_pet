@@ -1,0 +1,9 @@
+---
+description: Run Art Pet from source for routine debugging and testing
+alwaysApply: true
+---
+
+# Local debugging and testing
+
+- From the project root, use `dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug` to build and launch current source for desktop testing.
+- Run task-specific checks against the source build. Run `dotnet publish` and build a package only when the user asks for a package or for validation of the published build.
