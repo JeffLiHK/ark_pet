@@ -11,7 +11,8 @@ namespace ArtPet.Windows.Media;
 
 internal sealed class CharacterPack
 {
-    private const long OutfitPixelBudget = 40L * 1024 * 1024;
+    private const long OutfitPixelBudget = 64L * 1024 * 1024;
+    private const int MaximumOutfitFrames = 4096;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _directory;
     private readonly CanvasDefinition _canvas;
@@ -31,10 +32,12 @@ internal sealed class CharacterPack
 
     internal static IEnumerable<CharacterPack> FindInstalled()
     {
+        string localCharacter = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ArtPet", "assets", "hoolheyak");
         string[] directories =
         [
             Path.Combine(AppContext.BaseDirectory, "assets", "hoolheyak"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ArtPet", "assets", "hoolheyak", "desktop")
+            Path.Combine(localCharacter, "desktop-60"),
+            Path.Combine(localCharacter, "desktop")
         ];
 
         foreach (string directory in directories)
@@ -74,19 +77,24 @@ internal sealed class CharacterPack
 
     internal LoadedOutfit LoadOutfit(OutfitDefinition outfit, CancellationToken cancellationToken)
     {
-        long maximumFrames = OutfitPixelBudget / (4L * _canvas.Width * _canvas.Height);
-        if (!IsValidClip(outfit.Idle, maximumFrames))
+        if (!IsValidClip(outfit.Idle))
         {
-            throw new InvalidDataException("The outfit needs a valid idle animation within the pixel budget.");
+            throw new InvalidDataException("The outfit needs a valid idle animation.");
         }
 
-        FrameClip idle = DecodeClip(outfit.Idle!, cancellationToken);
+        ClipDefinition idleDefinition = outfit.Idle!;
+        ClipDefinition? touchDefinition = IsValidClip(outfit.Touch, MaximumOutfitFrames - idleDefinition.FrameCount) ? outfit.Touch : null;
+        double decodedBytes = 4d * _canvas.Width * _canvas.Height * (idleDefinition.FrameCount + (touchDefinition?.FrameCount ?? 0));
+        double decodeScale = Math.Min(1, Math.Sqrt(OutfitPixelBudget / decodedBytes));
+        int decodeWidth = Math.Max(1, (int)Math.Floor(_canvas.Width * decodeScale));
+
+        FrameClip idle = DecodeClip(idleDefinition, decodeWidth, cancellationToken);
         FrameClip? touch = null;
-        if (IsValidClip(outfit.Touch, maximumFrames - idle.Frames.Length))
+        if (touchDefinition is not null)
         {
             try
             {
-                touch = DecodeClip(outfit.Touch!, cancellationToken);
+                touch = DecodeClip(touchDefinition, decodeWidth, cancellationToken);
             }
             catch (Exception error) when (IsAssetError(error))
             {
@@ -94,7 +102,8 @@ internal sealed class CharacterPack
             }
         }
 
-        return new LoadedOutfit(outfit, idle, touch);
+        var anchor = new System.Windows.Point((double)_canvas.AnchorX / _canvas.Width, (double)_canvas.AnchorY / _canvas.Height);
+        return new LoadedOutfit(outfit, idle, touch, anchor);
     }
 
     internal BitmapSource? LoadPreview(OutfitDefinition outfit)
@@ -124,26 +133,35 @@ internal sealed class CharacterPack
     internal static bool IsAssetError(Exception error) => error is IOException or UnauthorizedAccessException or
         FormatException or NotSupportedException or ArgumentException or InvalidOperationException;
 
-    private static bool IsValidClip(ClipDefinition? clip, long maximumFrames) =>
-        clip is { Fps: >= 1 and <= 24, FrameCount: > 0 } && clip.FrameCount <= maximumFrames &&
+    private static bool IsValidClip(ClipDefinition? clip, int maximumFrames = MaximumOutfitFrames) =>
+        clip is { Fps: >= 1 and <= 60, FrameCount: > 0 } && clip.FrameCount <= maximumFrames &&
         !string.IsNullOrWhiteSpace(clip.Directory);
 
-    private FrameClip DecodeClip(ClipDefinition clip, CancellationToken cancellationToken)
+    private FrameClip DecodeClip(ClipDefinition clip, int decodeWidth, CancellationToken cancellationToken)
     {
         var frames = new BitmapSource[clip.FrameCount];
         for (int index = 0; index < frames.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             using var stream = File.OpenRead(ResolveFrame(clip, index));
-            var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            BitmapCacheOption cache = decodeWidth == _canvas.Width ? BitmapCacheOption.OnLoad : BitmapCacheOption.None;
+            var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, cache);
             BitmapFrame frame = decoder.Frames[0];
             if (frame.PixelWidth != _canvas.Width || frame.PixelHeight != _canvas.Height)
             {
                 throw new InvalidDataException("The animation frame size differs from the character canvas.");
             }
 
-            frame.Freeze();
-            frames[index] = frame;
+            if (decodeWidth == _canvas.Width)
+            {
+                frame.Freeze();
+                frames[index] = frame;
+            }
+            else
+            {
+                stream.Position = 0;
+                frames[index] = DecodeBitmap(stream, decodeWidth);
+            }
         }
 
         return new FrameClip(clip.Fps, frames);
@@ -152,11 +170,16 @@ internal sealed class CharacterPack
     private static BitmapSource DecodePreview(string file)
     {
         using var stream = File.OpenRead(file);
+        return DecodeBitmap(stream, 112);
+    }
+
+    private static BitmapSource DecodeBitmap(Stream stream, int width)
+    {
         var image = new BitmapImage();
         image.BeginInit();
         image.StreamSource = stream;
         image.CacheOption = BitmapCacheOption.OnLoad;
-        image.DecodePixelWidth = 112;
+        image.DecodePixelWidth = width;
         image.EndInit();
         image.Freeze();
         return image;
@@ -193,4 +216,4 @@ internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount)
 
 internal sealed record FrameClip(int Fps, BitmapSource[] Frames);
 
-internal sealed record LoadedOutfit(OutfitDefinition Definition, FrameClip Idle, FrameClip? Touch);
+internal sealed record LoadedOutfit(OutfitDefinition Definition, FrameClip Idle, FrameClip? Touch, System.Windows.Point Anchor);

@@ -63,6 +63,9 @@ internal sealed class TrayIcon : IDisposable
         };
     }
 
+    internal void ShowSettingsSaveError() =>
+        _icon.ShowBalloonTip(3500, "Art Pet", "目前無法保存設定。重開後會恢復上次保存的設定。", ToolTipIcon.Warning);
+
     public void Dispose()
     {
         _icon.Dispose();

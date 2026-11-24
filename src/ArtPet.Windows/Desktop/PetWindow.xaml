@@ -9,6 +9,10 @@
     <Window.ContextMenu>
         <ContextMenu>
             <MenuItem x:Name="WardrobeItem" Header="衣櫃…" Visibility="Collapsed" />
+            <MenuItem Header="設定">
+                <MenuItem x:Name="SizeSettingsItem" Header="縮放大小" />
+                <MenuItem x:Name="FrameRateSettingsItem" Header="動畫幀率" />
+            </MenuItem>
             <MenuItem Header="置頂" IsCheckable="True"
                       IsChecked="{Binding PlacementTarget.Topmost, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=TwoWay}" />
             <MenuItem Header="隱藏小人" Click="HidePet" />

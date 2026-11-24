@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Windows;
@@ -30,6 +31,16 @@ public partial class App : Application
         var pet = new PetWindow();
         MainWindow = pet;
         pet.Closed += (_, _) => Shutdown();
+        var settingsStore = new PetSettingsStore(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ArtPet", "settings.json"));
+        pet.ApplySettings(settingsStore.Load());
+        pet.SettingsSelected += settings =>
+        {
+            if (!settingsStore.TrySave(settings))
+            {
+                _tray?.ShowSettingsSaveError();
+            }
+        };
 
         foreach (CharacterPack pack in CharacterPack.FindInstalled())
         {

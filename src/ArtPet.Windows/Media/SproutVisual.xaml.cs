@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Threading;
+using System.Windows.Media;
 
 namespace ArtPet.Windows.Media;
 
@@ -10,42 +10,64 @@ public partial class SproutVisual : UserControl
 {
     private const double IdleCycleMs = 3100;
     private const double ReactionMs = 620;
-    private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(50);
     private readonly Stopwatch _clock = new();
-    private readonly DispatcherTimer _timer;
     private bool _reacting;
+    private long _lastFrame;
 
     public SproutVisual()
     {
         InitializeComponent();
-        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = FrameInterval };
-        _timer.Tick += (_, _) => DrawFrame();
     }
+
+    internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
 
     internal void Start()
     {
+        if (_clock.IsRunning)
+        {
+            return;
+        }
+
         SetReaction(false);
-        _clock.Restart();
-        DrawFrame();
-        _timer.Start();
+        RestartAnimation();
+        CompositionTarget.Rendering += UpdateFrame;
     }
 
     internal void Stop()
     {
-        _timer.Stop();
-        _clock.Reset();
+        if (_clock.IsRunning)
+        {
+            CompositionTarget.Rendering -= UpdateFrame;
+            _clock.Reset();
+        }
     }
 
     internal void React()
     {
-        if (_reacting || !_timer.IsEnabled)
+        if (_reacting || !_clock.IsRunning)
         {
             return;
         }
 
         SetReaction(true);
+        RestartAnimation();
+    }
+
+    private void RestartAnimation()
+    {
         _clock.Restart();
+        _lastFrame = 0;
         DrawFrame();
+    }
+
+    private void UpdateFrame(object? sender, EventArgs e)
+    {
+        long frame = (long)(_clock.Elapsed.TotalSeconds * FramesPerSecond);
+        if (frame != _lastFrame)
+        {
+            _lastFrame = frame;
+            DrawFrame();
+        }
     }
 
     private void DrawFrame()
@@ -55,6 +77,7 @@ public partial class SproutVisual : UserControl
         {
             SetReaction(false);
             _clock.Restart();
+            _lastFrame = 0;
             elapsed = 0;
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
@@ -9,6 +10,7 @@ using Microsoft.Win32;
 using Point = System.Drawing.Point;
 using Rectangle = System.Drawing.Rectangle;
 using Screen = System.Windows.Forms.Screen;
+using ScaleAnchor = System.Windows.Point;
 using WindowBounds = ArtPet.Windows.Desktop.NativeMethods.WindowBounds;
 
 namespace ArtPet.Windows.Desktop;
@@ -16,6 +18,7 @@ namespace ArtPet.Windows.Desktop;
 public partial class PetWindow : Window
 {
     private const int CornerMarginDip = 16;
+    private const double DefaultSizeDip = 160;
     private readonly DispatcherTimer _gestureTimer;
     private readonly FramePlayer _player;
     private HwndSource? _source;
@@ -24,6 +27,8 @@ public partial class PetWindow : Window
     private bool _atPrimaryCorner = true;
     private Press? _press;
     private bool _dragging;
+    private PetSettings _settings = new();
+    private ScaleAnchor _scaleAnchor = new(0.5, 0.91);
 
     public PetWindow()
     {
@@ -36,10 +41,56 @@ public partial class PetWindow : Window
         };
         _gestureTimer.Tick += PollGesture;
         IsVisibleChanged += UpdateVisibility;
+
+        foreach (int size in PetSettings.Sizes)
+        {
+            AddSettingOption(SizeSettingsItem, size, $"{size}%", () => ChooseSettings(_settings with { SizePercent = size }));
+        }
+
+        foreach (int fps in PetSettings.FrameRates)
+        {
+            AddSettingOption(FrameRateSettingsItem, fps, $"{fps} FPS", () => ChooseSettings(_settings with { AnimationFps = fps }));
+        }
+
+        ApplySettings(_settings);
+    }
+
+    internal event Action<PetSettings>? SettingsSelected;
+
+    internal void ApplySettings(PetSettings settings)
+    {
+        _settings = settings;
+        UpdateSettingChecks(SizeSettingsItem, settings.SizePercent);
+        UpdateSettingChecks(FrameRateSettingsItem, settings.AnimationFps);
+        _player.FramesPerSecond = settings.AnimationFps;
+        PetArt.FramesPerSecond = settings.AnimationFps;
+        ResizePet(DefaultSizeDip * settings.SizePercent / PetSettings.DefaultSize);
+    }
+
+    private void ChooseSettings(PetSettings settings)
+    {
+        ApplySettings(settings);
+        SettingsSelected?.Invoke(settings);
+    }
+
+    private static void AddSettingOption(MenuItem parent, int value, string label, Action choose)
+    {
+        var item = new MenuItem { Header = label, Tag = value, IsCheckable = true };
+        item.Click += (_, _) => choose();
+        parent.Items.Add(item);
+    }
+
+    private static void UpdateSettingChecks(MenuItem parent, int selection)
+    {
+        foreach (MenuItem item in parent.Items)
+        {
+            item.IsChecked = item.Tag is int value && value == selection;
+        }
     }
 
     internal void SetOutfit(LoadedOutfit outfit)
     {
+        _scaleAnchor = outfit.Anchor;
         PetArt.Stop();
         PetArt.Visibility = Visibility.Collapsed;
         _player.SetOutfit(outfit, IsVisible);
@@ -145,6 +196,34 @@ public partial class PetWindow : Window
             int margin = (int)Math.Round(CornerMarginDip * NativeMethods.GetDpiForWindow(_handle) / 96.0);
             Rectangle work = GetWorkingArea(monitor);
             MoveWithinWorkArea(monitor, work, bounds, work.Right - bounds.Width - margin, work.Bottom - bounds.Height - margin);
+        }
+    }
+
+    private void ResizePet(double size)
+    {
+        if (Width == size && Height == size)
+        {
+            return;
+        }
+
+        StopGesture();
+        WindowBounds previous = default;
+        Screen? monitor = !_atPrimaryCorner && NativeMethods.GetWindowRect(_handle, out previous)
+            ? Screen.AllScreens.FirstOrDefault(screen => screen.DeviceName == _monitorName)
+            : null;
+
+        Width = size;
+        Height = size;
+
+        if (monitor is not null && NativeMethods.GetWindowRect(_handle, out WindowBounds resized))
+        {
+            int x = previous.Left + (int)Math.Round((previous.Width - resized.Width) * _scaleAnchor.X);
+            int y = previous.Top + (int)Math.Round((previous.Height - resized.Height) * _scaleAnchor.Y);
+            MoveWithinWorkArea(monitor, GetWorkingArea(monitor), resized, x, y);
+        }
+        else if (_handle != IntPtr.Zero)
+        {
+            RecoverPlacement();
         }
     }
 

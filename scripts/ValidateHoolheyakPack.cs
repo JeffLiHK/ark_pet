@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+const int MaximumOutfitFrames = 4096;
+
 try
 {
     string packDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(args.Single()));
@@ -16,6 +18,7 @@ try
     {
         JsonElement outfit = manifest.GetProperty("outfits").EnumerateArray()
             .Single(item => item.GetProperty("id").GetString() == outfitId);
+        int remainingFrames = MaximumOutfitFrames;
         foreach (string clipName in new[] { "idle", "touch" })
         {
             JsonElement clip = outfit.GetProperty(clipName);
@@ -23,10 +26,12 @@ try
             int frameCount = clip.GetProperty("frameCount").GetInt32();
             string clipPath = Path.GetFullPath(directory, packDirectory);
             if (Path.IsPathRooted(directory) || !clipPath.StartsWith(packDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
-                clip.GetProperty("fps").GetInt32() is < 1 or > 24 || frameCount <= 0)
+                clip.GetProperty("fps").GetInt32() is < 1 or > 60 || frameCount <= 0 || frameCount > remainingFrames)
             {
                 throw new InvalidDataException($"The {clipName} animation for {outfitId} is invalid.");
             }
+
+            remainingFrames -= frameCount;
 
             for (int index = 0; index < frameCount; index++)
             {

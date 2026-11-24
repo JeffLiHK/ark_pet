@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Threading;
+using System.Windows.Media;
 
 namespace ArtPet.Windows.Media;
 
@@ -10,7 +10,6 @@ internal sealed class FramePlayer
 {
     private readonly Image _image;
     private readonly FrameworkElement _breeze;
-    private readonly DispatcherTimer _timer;
     private LoadedOutfit? _outfit;
     private FrameClip? _clip;
     private long _started;
@@ -22,11 +21,10 @@ internal sealed class FramePlayer
     {
         _image = image;
         _breeze = breeze;
-        _timer = new DispatcherTimer(DispatcherPriority.Background);
-        _timer.Tick += (_, _) => UpdateFrame();
     }
 
     internal bool HasOutfit => _outfit is not null;
+    internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
 
     internal void SetOutfit(LoadedOutfit outfit, bool visible)
     {
@@ -41,16 +39,20 @@ internal sealed class FramePlayer
 
     internal void Start()
     {
-        if (_outfit is { } outfit)
+        if (_clip is null && _outfit is { } outfit)
         {
             BeginClip(outfit.Idle, playingTouch: false);
-            _timer.Start();
+            CompositionTarget.Rendering += UpdateFrame;
         }
     }
 
     internal void Stop()
     {
-        _timer.Stop();
+        if (_clip is not null)
+        {
+            CompositionTarget.Rendering -= UpdateFrame;
+        }
+
         _clip = null;
         _playingTouch = false;
         _breezeStarted = null;
@@ -59,7 +61,7 @@ internal sealed class FramePlayer
 
     internal void React()
     {
-        if (!_timer.IsEnabled || _outfit is null || _playingTouch || _breezeStarted is not null)
+        if (_clip is null || _outfit is null || _playingTouch || _breezeStarted is not null)
         {
             return;
         }
@@ -81,11 +83,10 @@ internal sealed class FramePlayer
         _index = 0;
         _playingTouch = playingTouch;
         _started = Stopwatch.GetTimestamp();
-        _timer.Interval = TimeSpan.FromSeconds(1d / clip.Fps);
         _image.Source = clip.Frames[0];
     }
 
-    private void UpdateFrame()
+    private void UpdateFrame(object? sender, EventArgs e)
     {
         if (_clip is not { } clip || _outfit is not { } outfit)
         {
@@ -101,14 +102,17 @@ internal sealed class FramePlayer
             }
         }
 
-        long position = (long)(Stopwatch.GetElapsedTime(_started).TotalSeconds * clip.Fps);
-        if (_playingTouch && position >= clip.Frames.Length)
+        double elapsed = Stopwatch.GetElapsedTime(_started).TotalSeconds;
+        if (_playingTouch && elapsed >= (double)clip.Frames.Length / clip.Fps)
         {
             BeginClip(outfit.Idle, playingTouch: false);
             return;
         }
 
-        int index = (int)(position % clip.Frames.Length);
+        int playbackRate = Math.Min(FramesPerSecond, clip.Fps);
+        long displayedFrame = (long)(elapsed * playbackRate);
+        long sourceFrame = displayedFrame * clip.Fps / playbackRate;
+        int index = (int)(sourceFrame % clip.Frames.Length);
         if (index != _index)
         {
             _index = index;

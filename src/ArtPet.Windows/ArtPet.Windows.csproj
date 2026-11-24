@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Media/Sprout.ico</ApplicationIcon>
+    <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(LOCALAPPDATA)\ArtPet\assets\hoolheyak\desktop-60\character.json')">$(LOCALAPPDATA)\ArtPet\assets\hoolheyak\desktop-60</HoolheyakPackDirectory>
     <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == ''">$(LOCALAPPDATA)\ArtPet\assets\hoolheyak\desktop</HoolheyakPackDirectory>
     <!-- WPF starts the process, so the manifest sets DPI awareness before any HWND exists. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
