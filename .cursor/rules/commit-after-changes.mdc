@@ -1,0 +1,10 @@
+---
+description: Commit verified changes after each Art Pet task
+alwaysApply: true
+---
+
+# Git commits
+
+- After completing and verifying project changes, stage the task's files by explicit path and check `git diff --cached --name-status` before committing.
+- Use a descriptive commit message such as `feat: add wardrobe outfit switching`. Leave unrelated work, generated builds and local character assets outside the commit.
+- Push only when the user requests it.
