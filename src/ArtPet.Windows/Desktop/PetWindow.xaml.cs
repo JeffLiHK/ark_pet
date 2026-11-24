@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
+using ArtPet.Windows.Media;
 using Microsoft.Win32;
 using Point = System.Drawing.Point;
 using Rectangle = System.Drawing.Rectangle;
@@ -16,6 +17,7 @@ public partial class PetWindow : Window
 {
     private const int CornerMarginDip = 16;
     private readonly DispatcherTimer _gestureTimer;
+    private readonly FramePlayer _player;
     private HwndSource? _source;
     private IntPtr _handle;
     private string? _monitorName;
@@ -26,6 +28,7 @@ public partial class PetWindow : Window
     public PetWindow()
     {
         InitializeComponent();
+        _player = new FramePlayer(CharacterImage, Breeze);
 
         _gestureTimer = new DispatcherTimer(DispatcherPriority.Input)
         {
@@ -33,6 +36,19 @@ public partial class PetWindow : Window
         };
         _gestureTimer.Tick += PollGesture;
         IsVisibleChanged += UpdateVisibility;
+    }
+
+    internal void SetOutfit(LoadedOutfit outfit)
+    {
+        PetArt.Stop();
+        PetArt.Visibility = Visibility.Collapsed;
+        _player.SetOutfit(outfit, IsVisible);
+    }
+
+    internal void AddWardrobeCommand(Action open)
+    {
+        WardrobeItem.Visibility = Visibility.Visible;
+        WardrobeItem.Click += (_, _) => open();
     }
 
     public void ShowPet(bool resetPosition = false)
@@ -66,6 +82,7 @@ public partial class PetWindow : Window
     {
         StopGesture();
         PetArt.Stop();
+        _player.Stop();
         SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
         _source?.RemoveHook(WindowMessage);
         _handle = IntPtr.Zero;
@@ -203,7 +220,14 @@ public partial class PetWindow : Window
 
         if (touched)
         {
-            PetArt.React();
+            if (_player.HasOutfit)
+            {
+                _player.React();
+            }
+            else
+            {
+                PetArt.React();
+            }
         }
     }
 
@@ -233,12 +257,20 @@ public partial class PetWindow : Window
     {
         if (IsVisible)
         {
-            PetArt.Start();
+            if (_player.HasOutfit)
+            {
+                _player.Start();
+            }
+            else
+            {
+                PetArt.Start();
+            }
         }
         else
         {
             StopGesture();
             PetArt.Stop();
+            _player.Stop();
         }
     }
 

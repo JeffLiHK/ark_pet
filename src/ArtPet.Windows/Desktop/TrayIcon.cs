@@ -10,7 +10,7 @@ internal sealed class TrayIcon : IDisposable
     private readonly ContextMenuStrip _menu = new();
     private readonly NotifyIcon _icon;
 
-    public TrayIcon(PetWindow pet, Action exit)
+    public TrayIcon(PetWindow pet, Action exit, Action? openWardrobe)
     {
         var iconUri = new Uri("/ArtPet.Windows;component/Media/Sprout.ico", UriKind.Relative);
         using var imageStream = System.Windows.Application.GetResourceStream(iconUri)!.Stream;
@@ -38,7 +38,15 @@ internal sealed class TrayIcon : IDisposable
         var exitItem = new ToolStripMenuItem("結束程式");
         exitItem.Click += (_, _) => exit();
 
-        _menu.Items.AddRange([visibilityItem, resetItem, topmostItem, new ToolStripSeparator(), exitItem]);
+        _menu.Items.Add(visibilityItem);
+        if (openWardrobe is not null)
+        {
+            var wardrobeItem = new ToolStripMenuItem("衣櫃…");
+            wardrobeItem.Click += (_, _) => openWardrobe();
+            _menu.Items.Add(wardrobeItem);
+        }
+
+        _menu.Items.AddRange([resetItem, topmostItem, new ToolStripSeparator(), exitItem]);
         _menu.Opening += (_, _) =>
         {
             visibilityItem.Text = pet.IsVisible ? "隱藏小人" : "顯示小人";

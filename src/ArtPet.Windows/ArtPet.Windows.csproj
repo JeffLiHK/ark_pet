@@ -7,10 +7,18 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Media/Sprout.ico</ApplicationIcon>
+    <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == ''">$(LOCALAPPDATA)\ArtPet\assets\hoolheyak\desktop</HoolheyakPackDirectory>
     <!-- WPF starts the process, so the manifest sets DPI awareness before any HWND exists. -->
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Media/Sprout.ico" />
   </ItemGroup>
+  <ItemGroup Condition="'$(BundleHoolheyak)' == 'true'">
+    <Content Include="$(HoolheyakPackDirectory)\character.json;$(HoolheyakPackDirectory)\**\*.png"
+             Link="assets\hoolheyak\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckHoolheyakPack" BeforeTargets="PrepareForPublish" Condition="'$(BundleHoolheyak)' == 'true'">
+    <Exec Command="dotnet run --file &quot;$(MSBuildProjectDirectory)\..\..\scripts\ValidateHoolheyakPack.cs&quot; -- &quot;$(HoolheyakPackDirectory)&quot;" />
+  </Target>
 </Project>

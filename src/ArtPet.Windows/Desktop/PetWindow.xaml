@@ -4,14 +4,21 @@
         xmlns:media="clr-namespace:ArtPet.Windows.Media"
         Title="Art Pet" Width="160" Height="160"
         WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True"
-        Background="Transparent" ShowInTaskbar="False" ShowActivated="False" Topmost="True"
+        Background="Transparent" ShowInTaskbar="False" ShowActivated="False" Topmost="True" Cursor="Hand"
         MouseLeftButtonDown="StartGesture" MouseLeftButtonUp="EndGesture">
     <Window.ContextMenu>
         <ContextMenu>
+            <MenuItem x:Name="WardrobeItem" Header="衣櫃…" Visibility="Collapsed" />
             <MenuItem Header="置頂" IsCheckable="True"
                       IsChecked="{Binding PlacementTarget.Topmost, RelativeSource={RelativeSource AncestorType=ContextMenu}, Mode=TwoWay}" />
             <MenuItem Header="隱藏小人" Click="HidePet" />
         </ContextMenu>
     </Window.ContextMenu>
-    <media:SproutVisual x:Name="PetArt" />
+    <Grid>
+        <media:SproutVisual x:Name="PetArt" />
+        <Image x:Name="CharacterImage" Stretch="Uniform" />
+        <Path x:Name="Breeze" Opacity="0" IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center"
+              Stroke="#A8EFD5" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+              Data="M0,11 Q22,22 50,3 M17,22 Q34,27 58,12" />
+    </Grid>
 </Window>
