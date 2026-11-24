@@ -84,26 +84,34 @@ internal sealed class CharacterPack
 
         ClipDefinition idleDefinition = outfit.Idle!;
         ClipDefinition? touchDefinition = IsValidClip(outfit.Touch, MaximumOutfitFrames - idleDefinition.FrameCount) ? outfit.Touch : null;
-        double decodedBytes = 4d * _canvas.Width * _canvas.Height * (idleDefinition.FrameCount + (touchDefinition?.FrameCount ?? 0));
-        double decodeScale = Math.Min(1, Math.Sqrt(OutfitPixelBudget / decodedBytes));
-        int decodeWidth = Math.Max(1, (int)Math.Floor(_canvas.Width * decodeScale));
-
-        FrameClip idle = DecodeClip(idleDefinition, decodeWidth, cancellationToken);
-        FrameClip? touch = null;
-        if (touchDefinition is not null)
+        int frameCount = idleDefinition.FrameCount + (touchDefinition?.FrameCount ?? 0);
+        ClipDefinition?[] candidates = [outfit.Move, outfit.Sit, outfit.Sleep];
+        var variations = new List<ClipDefinition>(candidates.Length);
+        foreach (ClipDefinition? candidate in candidates)
         {
-            try
+            if (candidate is not null && IsValidClip(candidate, MaximumOutfitFrames - frameCount))
             {
-                touch = DecodeClip(touchDefinition, decodeWidth, cancellationToken);
-            }
-            catch (Exception error) when (IsAssetError(error))
-            {
-                // A missing optional clip uses the visual's brief breeze effect.
+                variations.Add(candidate);
+                frameCount += candidate.FrameCount;
             }
         }
 
+        double decodedBytes = 4d * _canvas.Width * _canvas.Height * frameCount;
+        double decodeScale = Math.Min(1, Math.Sqrt(OutfitPixelBudget / decodedBytes));
+        int decodeWidth = Math.Max(1, (int)Math.Floor(_canvas.Width * decodeScale));
+
+        var idleClips = new List<FrameClip>(variations.Count + 1) { DecodeClip(idleDefinition, decodeWidth, cancellationToken) };
+        foreach (ClipDefinition variation in variations)
+        {
+            if (DecodeOptionalClip(variation, decodeWidth, cancellationToken) is { } loaded)
+            {
+                idleClips.Add(loaded);
+            }
+        }
+
+        FrameClip? touch = touchDefinition is null ? null : DecodeOptionalClip(touchDefinition, decodeWidth, cancellationToken);
         var anchor = new System.Windows.Point((double)_canvas.AnchorX / _canvas.Width, (double)_canvas.AnchorY / _canvas.Height);
-        return new LoadedOutfit(outfit, idle, touch, anchor);
+        return new LoadedOutfit(outfit, idleClips, touch, anchor);
     }
 
     internal BitmapSource? LoadPreview(OutfitDefinition outfit)
@@ -136,6 +144,18 @@ internal sealed class CharacterPack
     private static bool IsValidClip(ClipDefinition? clip, int maximumFrames = MaximumOutfitFrames) =>
         clip is { Fps: >= 1 and <= 60, FrameCount: > 0 } && clip.FrameCount <= maximumFrames &&
         !string.IsNullOrWhiteSpace(clip.Directory);
+
+    private FrameClip? DecodeOptionalClip(ClipDefinition clip, int decodeWidth, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return DecodeClip(clip, decodeWidth, cancellationToken);
+        }
+        catch (Exception error) when (IsAssetError(error))
+        {
+            return null;
+        }
+    }
 
     private FrameClip DecodeClip(ClipDefinition clip, int decodeWidth, CancellationToken cancellationToken)
     {
@@ -210,10 +230,14 @@ internal sealed class CharacterPack
     private sealed record CanvasDefinition(int Width, int Height, int AnchorX, int AnchorY);
 }
 
-internal sealed record OutfitDefinition(string Id, string DisplayName, string? Preview, ClipDefinition? Idle, ClipDefinition? Touch);
+internal sealed record OutfitDefinition(string Id, string DisplayName, string? Preview, ClipDefinition? Idle, ClipDefinition? Touch,
+    ClipDefinition? Move, ClipDefinition? Sit, ClipDefinition? Sleep);
 
 internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount);
 
 internal sealed record FrameClip(int Fps, BitmapSource[] Frames);
 
-internal sealed record LoadedOutfit(OutfitDefinition Definition, FrameClip Idle, FrameClip? Touch, System.Windows.Point Anchor);
+internal sealed record LoadedOutfit(OutfitDefinition Definition, IReadOnlyList<FrameClip> IdleClips, FrameClip? Touch, System.Windows.Point Anchor)
+{
+    internal FrameClip Idle => IdleClips[0];
+}

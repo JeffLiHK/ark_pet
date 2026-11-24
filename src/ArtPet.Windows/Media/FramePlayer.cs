@@ -16,6 +16,7 @@ internal sealed class FramePlayer
     private long? _breezeStarted;
     private bool _playingTouch;
     private int _index;
+    private int _idleClipIndex;
 
     internal FramePlayer(Image image, FrameworkElement breeze)
     {
@@ -41,6 +42,7 @@ internal sealed class FramePlayer
     {
         if (_clip is null && _outfit is { } outfit)
         {
+            _idleClipIndex = 0;
             BeginClip(outfit.Idle, playingTouch: false);
             CompositionTarget.Rendering += UpdateFrame;
         }
@@ -86,6 +88,18 @@ internal sealed class FramePlayer
         _image.Source = clip.Frames[0];
     }
 
+    private void BeginNextIdleClip(LoadedOutfit outfit)
+    {
+        int count = outfit.IdleClips.Count;
+        if (count > 1)
+        {
+            // Pick uniformly from the other idle clips to avoid consecutive repeats.
+            _idleClipIndex = (_idleClipIndex + Random.Shared.Next(1, count)) % count;
+        }
+
+        BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false);
+    }
+
     private void UpdateFrame(object? sender, EventArgs e)
     {
         if (_clip is not { } clip || _outfit is not { } outfit)
@@ -103,9 +117,9 @@ internal sealed class FramePlayer
         }
 
         double elapsed = Stopwatch.GetElapsedTime(_started).TotalSeconds;
-        if (_playingTouch && elapsed >= (double)clip.Frames.Length / clip.Fps)
+        if (elapsed >= (double)clip.Frames.Length / clip.Fps && (_playingTouch || outfit.IdleClips.Count > 1))
         {
-            BeginClip(outfit.Idle, playingTouch: false);
+            BeginNextIdleClip(outfit);
             return;
         }
 

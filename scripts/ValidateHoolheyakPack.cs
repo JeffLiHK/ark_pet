@@ -19,9 +19,18 @@ try
         JsonElement outfit = manifest.GetProperty("outfits").EnumerateArray()
             .Single(item => item.GetProperty("id").GetString() == outfitId);
         int remainingFrames = MaximumOutfitFrames;
-        foreach (string clipName in new[] { "idle", "touch" })
+        foreach (string clipName in new[] { "idle", "touch", "move", "sit", "sleep" })
         {
-            JsonElement clip = outfit.GetProperty(clipName);
+            if (!outfit.TryGetProperty(clipName, out JsonElement clip) || clip.ValueKind == JsonValueKind.Null)
+            {
+                if (clipName is "idle" or "touch")
+                {
+                    throw new InvalidDataException($"The {clipName} animation for {outfitId} is missing.");
+                }
+
+                continue;
+            }
+
             string directory = clip.GetProperty("directory").GetString() ?? string.Empty;
             int frameCount = clip.GetProperty("frameCount").GetInt32();
             string clipPath = Path.GetFullPath(directory, packDirectory);
