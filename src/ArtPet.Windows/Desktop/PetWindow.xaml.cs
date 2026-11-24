@@ -63,6 +63,7 @@ public partial class PetWindow : Window
         UpdateSettingChecks(SizeSettingsItem, settings.SizePercent);
         UpdateSettingChecks(FrameRateSettingsItem, settings.AnimationFps);
         _player.FramesPerSecond = settings.AnimationFps;
+        _player.IdleLoopsPerAction = settings.IdleLoopsPerAction;
         PetArt.FramesPerSecond = settings.AnimationFps;
         ResizePet(DefaultSizeDip * settings.SizePercent / PetSettings.DefaultSize);
     }

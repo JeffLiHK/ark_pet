@@ -26,6 +26,7 @@ internal sealed class FramePlayer
 
     internal bool HasOutfit => _outfit is not null;
     internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
+    internal int IdleLoopsPerAction { get; set; } = PetSettings.DefaultIdleLoopsPerAction;
 
     internal void SetOutfit(LoadedOutfit outfit, bool visible)
     {
@@ -91,12 +92,8 @@ internal sealed class FramePlayer
     private void BeginNextIdleClip(LoadedOutfit outfit)
     {
         int count = outfit.IdleClips.Count;
-        if (count > 1)
-        {
-            // Pick uniformly from the other idle clips to avoid consecutive repeats.
-            _idleClipIndex = (_idleClipIndex + Random.Shared.Next(1, count)) % count;
-        }
-
+        // Pick uniformly from the other idle clips to avoid consecutive repeats.
+        _idleClipIndex = (_idleClipIndex + Random.Shared.Next(1, count)) % count;
         BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false);
     }
 
@@ -116,17 +113,25 @@ internal sealed class FramePlayer
             }
         }
 
-        double elapsed = Stopwatch.GetElapsedTime(_started).TotalSeconds;
-        if (elapsed >= (double)clip.Frames.Length / clip.Fps && (_playingTouch || outfit.IdleClips.Count > 1))
+        int frameCount = clip.Frames.Length;
+        double elapsedSourceFrames = Stopwatch.GetElapsedTime(_started).TotalSeconds * clip.Fps;
+        if (_playingTouch && elapsedSourceFrames >= frameCount)
+        {
+            BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false);
+            return;
+        }
+
+        if (!_playingTouch && outfit.IdleClips.Count > 1 && elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
         {
             BeginNextIdleClip(outfit);
             return;
         }
 
         int playbackRate = Math.Min(FramesPerSecond, clip.Fps);
-        long displayedFrame = (long)(elapsed * playbackRate);
-        long sourceFrame = displayedFrame * clip.Fps / playbackRate;
-        int index = (int)(sourceFrame % clip.Frames.Length);
+        // Sample each loop from its first frame, including clips with an odd frame count at half rate.
+        double sourceFramesInLoop = elapsedSourceFrames % frameCount;
+        int displayedFrame = (int)(sourceFramesInLoop * playbackRate / clip.Fps);
+        int index = displayedFrame * clip.Fps / playbackRate;
         if (index != _index)
         {
             _index = index;
