@@ -28,16 +28,12 @@ internal static class CharacterIcon
             }
 
             const int size = 64;
-            const int padding = 2;
             var cropped = new CroppedBitmap(frame, bounds);
-            double scale = (double)(size - 2 * padding) / Math.Max(bounds.Width, bounds.Height);
-            double width = bounds.Width * scale;
-            double height = bounds.Height * scale;
             var visual = new DrawingVisual();
             RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
             using (DrawingContext drawing = visual.RenderOpen())
             {
-                drawing.DrawImage(cropped, new Rect((size - width) / 2, (size - height) / 2, width, height));
+                drawing.DrawImage(cropped, new Rect(0, 0, size, size));
             }
 
             var icon = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
@@ -61,9 +57,11 @@ internal static class CharacterIcon
         int height = Math.Max(1, (int)Math.Round(body.Height * 0.44));
         var upper = new CroppedBitmap(frame, new Int32Rect(body.X, body.Y, body.Width, height));
         Int32Rect head = ArtworkBounds.VisiblePixels(upper);
-        // Keep wide accessories from shrinking the face at notification-area sizes.
-        int width = Math.Min(head.Width, Math.Max(1, (int)Math.Round(head.Height * 1.2)));
-        return new Int32Rect(body.X + head.X + (head.Width - width) / 2, body.Y + head.Y, width, head.Height);
+        // Frame the face in a square and keep the chin in view when cropping tall accessories.
+        int side = Math.Max(1, (int)Math.Round(Math.Min(head.Width, head.Height) * 0.8));
+        int x = body.X + head.X + (head.Width - side) / 2;
+        int y = body.Y + head.Y + head.Height - side;
+        return new Int32Rect(x, y, side, side);
     }
 
     internal static Icon ToTrayIcon(BitmapSource artwork)
