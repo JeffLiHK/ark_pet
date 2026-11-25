@@ -53,8 +53,6 @@ public partial class PetWindow : Window
         InitializeComponent();
         _player = new FramePlayer(CharacterImage, Breeze);
         _voice = new PetVoicePlayer(SetVoiceSubtitle);
-        _roamTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Background, UpdateRoaming, Dispatcher);
-        _roamTimer.Stop();
         ContextMenu.Opened += (_, _) => PauseRoaming();
         VoiceBubble.CustomPopupPlacementCallback = PlaceVoiceBubble;
         // An open WPF popup does not follow its placement target when the window moves.
@@ -235,7 +233,7 @@ public partial class PetWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         StopGesture();
-        _roamTimer.Stop();
+        StopRoaming();
         _voice.Stop();
         PetArt.Stop();
         _player.Stop();

@@ -37,6 +37,8 @@ internal partial class SettingsWindow : Window
         IdleLoopsInput.Text = settings.IdleLoopsPerAction.ToString(CultureInfo.InvariantCulture);
         InteractionModeCheckBox.IsChecked = settings.InteractionEnabled;
         FreeModeCheckBox.IsChecked = settings.FreeModeEnabled;
+        WalkingSpeedOptions.ItemsSource = PetSettings.WalkingSpeeds.ToArray();
+        WalkingSpeedOptions.SelectedItem = settings.WalkingSpeedPercent;
         VoiceOptions.SelectedValue = settings.VoiceLanguage;
         SubtitleOptions.SelectedValue = settings.SubtitleLanguage;
         VoiceVolume.Value = settings.VoiceVolumePercent;
@@ -53,6 +55,7 @@ internal partial class SettingsWindow : Window
         FrameRateOptions.SelectionChanged += ApplySelections;
         InteractionModeCheckBox.Click += ApplySelections;
         FreeModeCheckBox.Click += ApplySelections;
+        WalkingSpeedOptions.SelectionChanged += ApplySelections;
         VoiceOptions.SelectionChanged += ApplySelections;
         SubtitleOptions.SelectionChanged += ApplySelections;
         OutlineOptions.SelectionChanged += ApplySelections;
@@ -67,6 +70,7 @@ internal partial class SettingsWindow : Window
     private void ApplySelections(object sender, RoutedEventArgs e)
     {
         if (SizeOptions.SelectedItem is int size && FrameRateOptions.SelectedItem is int frameRate &&
+            WalkingSpeedOptions.SelectedItem is int walkingSpeed &&
             VoiceOptions.SelectedValue is string voice && SubtitleOptions.SelectedValue is string subtitle)
         {
             Apply(_settings with
@@ -75,6 +79,7 @@ internal partial class SettingsWindow : Window
                 AnimationFps = frameRate,
                 InteractionEnabled = InteractionModeCheckBox.IsChecked == true,
                 FreeModeEnabled = FreeModeCheckBox.IsChecked == true,
+                WalkingSpeedPercent = walkingSpeed,
                 OutlineLevel = OutlineOptions.SelectedIndex,
                 ShadowLevel = ShadowOptions.SelectedIndex,
                 VoiceVolumePercent = (int)VoiceVolume.Value,

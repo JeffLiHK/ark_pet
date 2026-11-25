@@ -10,6 +10,7 @@ internal sealed record PetSettings
 {
     internal const int DefaultSize = 100;
     internal const int DefaultAnimationFps = 30;
+    internal const int DefaultWalkingSpeedPercent = 100;
     internal const int DefaultIdleLoopsPerAction = 12;
     internal const int MinIdleLoopsPerAction = 1;
     internal const int MaxIdleLoopsPerAction = 100;
@@ -19,6 +20,7 @@ internal sealed record PetSettings
     internal const string SubtitlesOff = "off";
     internal static ReadOnlySpan<int> Sizes => [25, 50, 75, DefaultSize, 125, 150, 175, 200, 225, 250, 275, 300];
     internal static ReadOnlySpan<int> FrameRates => [DefaultAnimationFps, 60];
+    internal static ReadOnlySpan<int> WalkingSpeeds => [50, 75, DefaultWalkingSpeedPercent, 125, 150];
 
     public int SchemaVersion { get; init; } = 1;
     public int SizePercent { get; init; } = DefaultSize;
@@ -26,6 +28,7 @@ internal sealed record PetSettings
     public int IdleLoopsPerAction { get; init; } = DefaultIdleLoopsPerAction;
     public bool InteractionEnabled { get; init; } = true;
     public bool FreeModeEnabled { get; init; }
+    public int WalkingSpeedPercent { get; init; } = DefaultWalkingSpeedPercent;
     public int OutlineLevel { get; init; }
     public int ShadowLevel { get; init; }
     public int VoiceVolumePercent { get; init; } = 100;
@@ -53,6 +56,9 @@ internal sealed class PetSettingsStore(string filePath)
                 {
                     SizePercent = PetSettings.Sizes.Contains(settings.SizePercent) ? settings.SizePercent : PetSettings.DefaultSize,
                     AnimationFps = PetSettings.FrameRates.Contains(settings.AnimationFps) ? settings.AnimationFps : PetSettings.DefaultAnimationFps,
+                    WalkingSpeedPercent = PetSettings.WalkingSpeeds.Contains(settings.WalkingSpeedPercent)
+                        ? settings.WalkingSpeedPercent
+                        : PetSettings.DefaultWalkingSpeedPercent,
                     OutlineLevel = Math.Clamp(settings.OutlineLevel, 0, 3),
                     ShadowLevel = Math.Clamp(settings.ShadowLevel, 0, 3),
                     VoiceVolumePercent = Math.Clamp(settings.VoiceVolumePercent, 0, 100),

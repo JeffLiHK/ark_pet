@@ -8,6 +8,13 @@ using System.Windows.Media.Imaging;
 
 namespace ArtPet.Windows.Media;
 
+internal enum RoamingAction
+{
+    Idle,
+    Walk,
+    Sleep
+}
+
 internal sealed class FramePlayer
 {
     private const double ActionTransitionSeconds = 0.16;
@@ -20,7 +27,7 @@ internal sealed class FramePlayer
     private long _started;
     private long? _breezeStarted;
     private bool _playingTouch;
-    private bool _walking;
+    private RoamingAction _roamingAction;
     private bool _freeMode;
     private int _index;
     private int _idleClipIndex;
@@ -33,6 +40,8 @@ internal sealed class FramePlayer
 
     internal bool HasOutfit => _outfit is not null;
     internal bool CanWalk => _outfit?.Move is not null;
+    internal bool CanSleep => _outfit?.Sleep is not null;
+    internal bool IsSleeping => _roamingAction == RoamingAction.Sleep;
     internal bool IsReacting => _playingTouch || _breezeStarted is not null;
     internal bool MoveFacesLeft => _outfit?.Definition.MoveFacesLeft == true;
     internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
@@ -41,7 +50,7 @@ internal sealed class FramePlayer
     internal void SetFreeMode(bool enabled)
     {
         _freeMode = enabled;
-        if (enabled && _outfit is { Move: { } move } outfit && ReferenceEquals(outfit.IdleClips[_idleClipIndex], move))
+        if (enabled && _outfit is { Move: not null } outfit && _idleClipIndex != 0)
         {
             _idleClipIndex = 0;
             if (!_playingTouch && _clip is not null)
@@ -51,20 +60,28 @@ internal sealed class FramePlayer
         }
     }
 
-    internal void SetWalking(bool walking)
+    internal void SetRoamingAction(RoamingAction action)
     {
-        if (_walking == walking || _clip is null || _outfit is not { Move: { } move } outfit)
+        if (_roamingAction == action || _clip is null || _outfit is not { Move: not null } outfit)
         {
             return;
         }
 
-        _walking = walking;
+        _roamingAction = action;
         _idleClipIndex = 0;
-        if (!_playingTouch)
+        FrameClip clip = GetRestingClip(outfit);
+        if (!_playingTouch && !ReferenceEquals(_clip, clip))
         {
-            BeginClip(walking ? move : outfit.Idle, playingTouch: false, Stopwatch.GetTimestamp());
+            BeginClip(clip, playingTouch: false, Stopwatch.GetTimestamp());
         }
     }
+
+    private FrameClip GetRestingClip(LoadedOutfit outfit) => _roamingAction switch
+    {
+        RoamingAction.Walk => outfit.Move ?? outfit.Idle,
+        RoamingAction.Sleep => outfit.Sleep ?? outfit.Idle,
+        _ => outfit.IdleClips[_idleClipIndex]
+    };
 
     internal void CancelReaction()
     {
@@ -112,7 +129,7 @@ internal sealed class FramePlayer
         _clip = null;
         _transition = null;
         _playingTouch = false;
-        _walking = false;
+        _roamingAction = RoamingAction.Idle;
         _breezeStarted = null;
         _breeze.Opacity = 0;
         _image.Source = _outfit?.Idle.Frames[0];
@@ -160,8 +177,7 @@ internal sealed class FramePlayer
     private void BeginNextIdleClip(LoadedOutfit outfit, long now)
     {
         var candidates = Enumerable.Range(0, outfit.IdleClips.Count)
-            .Where(index => index != _idleClipIndex &&
-                (!_freeMode || !ReferenceEquals(outfit.IdleClips[index], outfit.Move)))
+            .Where(index => index != _idleClipIndex)
             .ToArray();
         if (candidates.Length > 0)
         {
@@ -191,12 +207,12 @@ internal sealed class FramePlayer
         double elapsedSourceFrames = Stopwatch.GetElapsedTime(_started, now).TotalSeconds * clip.Fps;
         if (_playingTouch && elapsedSourceFrames >= frameCount)
         {
-            BeginClip(_walking && outfit.Move is { } move ? move : outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
+            BeginClip(GetRestingClip(outfit), playingTouch: false, now);
             return;
         }
 
-        int standbyCount = outfit.IdleClips.Count - (_freeMode && outfit.Move is not null ? 1 : 0);
-        if (!_playingTouch && !_walking && standbyCount > 1 && elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
+        if (!_playingTouch && !(_freeMode && CanWalk) && outfit.IdleClips.Count > 1 &&
+            elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
         {
             BeginNextIdleClip(outfit, now);
             return;

@@ -203,6 +203,7 @@ internal sealed class CharacterPack
 
         var idleClips = new List<FrameClip>(variations.Count + 1) { DecodeClip(idleDefinition, decodeWidth, cancellationToken) };
         FrameClip? move = null;
+        FrameClip? sleep = null;
         foreach (ClipDefinition variation in variations)
         {
             if (DecodeOptionalClip(variation, decodeWidth, cancellationToken) is { } loaded)
@@ -212,12 +213,16 @@ internal sealed class CharacterPack
                 {
                     move = loaded;
                 }
+                else if (ReferenceEquals(variation, outfit.Sleep))
+                {
+                    sleep = loaded;
+                }
             }
         }
 
         FrameClip? touch = touchDefinition is null ? null : DecodeOptionalClip(touchDefinition, decodeWidth, cancellationToken);
         var anchor = new System.Windows.Point((double)_canvas.AnchorX / _canvas.Width, (double)_canvas.AnchorY / _canvas.Height);
-        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit), move);
+        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit), move, sleep);
     }
 
     internal BitmapSource? LoadPortrait(OutfitDefinition outfit)
@@ -381,7 +386,7 @@ internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount)
 internal sealed record FrameClip(int Fps, BitmapSource[] Frames);
 
 internal sealed record LoadedOutfit(OutfitDefinition Definition, IReadOnlyList<FrameClip> IdleClips, FrameClip? Touch,
-    System.Windows.Point Anchor, BitmapSource? Preview, FrameClip? Move = null)
+    System.Windows.Point Anchor, BitmapSource? Preview, FrameClip? Move = null, FrameClip? Sleep = null)
 {
     internal FrameClip Idle => IdleClips[0];
 }
