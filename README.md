@@ -42,29 +42,50 @@ dotnet run --file scripts/ValidateHoolheyakPack.cs -- 'local-data/assets/霍爾�
 dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -p:BundleHoolheyak=true -o artifacts/ArtPet-win-x64
 ```
 
-重新打包後，可開啟 `artifacts/ArtPet-win-x64/ArtPet.Windows.exe`。程式依賴和 .NET 執行環境位於 `data`，霍爾海雅的造型素材位於 `resource/assets`，授權文件位於 `resource/licenses`。如果把測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
+重新打包後，可開啟 `artifacts/ArtPet-win-x64/ArtPet.exe`。程式依賴和 .NET 執行環境位於 `data`，霍爾海雅的造型素材位於 `resource/assets`，授權文件位於 `resource/licenses`。如果把測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
 
-### GitHub 更新包
+## GitHub 更新包
 
-正式 Release 使用 `vX.Y` 或 `vX.Y.Z` 標籤，專案檔的 `Version` 使用對應的三段版本號，例如 `v1.3` 對應 `1.3.0`。程式包包含程式和執行環境。從對應標籤建置時，每次請使用全新的輸出資料夾。
+以下指令從專案根目錄以 PowerShell 7 執行。程式本體和資源包各自發佈，版本可獨立遞增。每次打包請使用新的輸出資料夾。
+
+### 程式本體打包（Windows x64）
+
+先將 `src/ArtPet.Windows/ArtPet.Windows.csproj` 的 `Version` 設為本次發佈版本，再將下方的 `$programVersion` 設為同一個三段版本號。GitHub 標籤可使用 `vX.Y` 或 `vX.Y.Z`，例如 `v1.7` 對應 `1.7.0`。
 
 首次建置會下載並驗證固定版本的 Spine 3.8 WebGL Runtime，程式將它內嵌供離線轉檔。對外發佈程式前，請確認符合 [Spine Runtime 授權](https://github.com/EsotericSoftware/spine-runtimes/blob/8b4844bd4b193ba9e54487ed397a777993cbad56/LICENSE)。
 
 ```powershell
-dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -o artifacts/program-v1.3.0/publish
-Compress-Archive -Path artifacts/program-v1.3.0/publish/* -DestinationPath artifacts/program-v1.3.0/ArtPet-win-x64.zip
+$programVersion = '1.7.0'
+$programOutput = "artifacts/program-v$programVersion"
+dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -o "$programOutput/publish"
+if ($LASTEXITCODE -ne 0) { throw '程式本體打包失敗。' }
+Compress-Archive -Path "$programOutput/publish/*" -DestinationPath "$programOutput/ArtPet-win-x64.zip"
 ```
 
-將 `ArtPet-win-x64.zip` 上傳到 `JeffLiHK/art_pet` 的公開正式 Release。程式包根目錄包含 `ArtPet.Windows.exe`、`data` 和 `resource`。從舊式平鋪版本首次升級時，請把 ZIP 解壓到新資料夾，並把舊安裝目錄中的 `local-data` 和 `assets`（如有）移過去。採用這個目錄結構的版本支援後續的程式內更新。
+將 `artifacts/program-v<程式版本>/ArtPet-win-x64.zip` 上傳到 `JeffLiHK/art_pet` 的公開正式 Release。ZIP 根目錄包含 `ArtPet.exe`、`data` 和 `resource`，角色素材由資源包提供。
 
-完整資源用獨立版本發佈。先準備角色素材和語音，再打包資源 ZIP 和相容性清單。
+從使用 `ArtPet.Windows.exe` 的版本首次升級時，請關閉程式，再把 ZIP 解壓到新資料夾。將舊安裝目錄中的 `local-data`、`assets` 及 `resource` 下的素材資料夾（如有）複製到新安裝的對應位置，再開啟 `ArtPet.exe`。如果原本有啟用登入時啟動，請在設定中關閉後重新啟用，以更新 Windows 的啟動路徑。以後可繼續使用程式內更新。
+
+### 資源包打包（模型、字幕和配音）
+
+先備妥角色素材，再匯入霍爾海雅的日語、普通話配音和字幕。將 `$assetVersion` 改為本次資源的三段版本號，並將 `$minAppVersion` 設為能讀取這批資源的最低程式版本。模型與配音分開打包的格式至少需要 `1.3.3`。
 
 ```powershell
+$assetVersion = '1.2.1'
+$minAppVersion = '1.3.3'
 pwsh -File scripts/ImportHoolheyakVoice.ps1
-pwsh -File scripts/BuildArtworkAssetRelease.ps1 -AssetVersion 1.2.1 -MinAppVersion 1.3.3
+if ($LASTEXITCODE -ne 0) { throw '語音匯入失敗。' }
+pwsh -File scripts/BuildArtworkAssetRelease.ps1 -AssetVersion $assetVersion -MinAppVersion $minAppVersion
 ```
 
-腳本輸出 `ArtPet-assets.zip`（角色、圖片、圖示及兩種字幕）、`ArtPet-voice-ja.zip`（日語配音）、`ArtPet-voice-zh-CN.zip`（普通話配音）和 `assets-manifest.json`。在同一個資源 Release 上傳四個附件。新增官方角色時，將含 `character.json` 的角色資料夾放入 `local-data/release-characters/<角色 ID>/`。同名資料夾可提供現有角色的替換素材。Spine 角色可隨包提供 `portraits/<造型 ID>.png`、`previews/<造型 ID>.png` 和 `icons/<造型 ID>.ico`，其他版本可在造型清單指定圖片。共用圖片可放入 `local-data/release-images/`，應用程式圖示可用 `-AppIcon` 指定。新增角色的語音可放在 `local-data/voices/<角色 ID>/<語言代碼>/`，或透過 `-VoiceDirectory` 指定準備好的語音根目錄。
+腳本將四個檔案輸出到 `artifacts/assets-v<資源版本>/`。將四個檔案上傳到 `JeffLiHK/art_pet_assets` 的同一個公開正式 Release。
+
+- `ArtPet-assets.zip` 包含角色、圖片、圖示及日文和繁體中文字幕。
+- `ArtPet-voice-ja.zip` 包含日語配音。
+- `ArtPet-voice-zh-CN.zip` 包含普通話配音。
+- `assets-manifest.json` 記錄資源版本和最低程式版本。
+
+新增官方角色時，將含 `character.json` 的角色資料夾放入 `local-data/release-characters/<角色 ID>/`。同名資料夾可提供現有角色的替換素材。Spine 角色可隨包提供 `portraits/<造型 ID>.png`、`previews/<造型 ID>.png` 和 `icons/<造型 ID>.ico`，其他版本可在造型清單指定圖片。共用圖片可放入 `local-data/release-images/`，應用程式圖示可用 `-AppIcon` 指定。新增角色的語音可放在 `local-data/voices/<角色 ID>/<語言代碼>/`，或透過 `-VoiceDirectory` 指定準備好的語音根目錄。
 
 正式版在執行檔旁的 `resource/managed-assets/` 下載、解壓和安裝模型、立繪、字幕和配音，並在同一處存放按需生成的影格。手動匯入的角色素材和配音可放在 `resource/imported-assets/` 和 `resource/voices/`。升級後首次啟動時，程式會把舊安裝目錄內的資源移到 `resource/`，目的資料夾已有內容時，舊資源會留在原處。開發版繼續使用專案的 `local-data/`。共用資源驗證完成才切換版本，啟動時若共用資源不完整，會嘗試上一個版本、隨附素材及本機匯入素材。檔案總管顯示的 EXE 內嵌圖示由程式 Release 更新。 [完整發佈流程](AGENTS.md#publish-github-releases)
 

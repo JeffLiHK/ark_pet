@@ -151,7 +151,7 @@ internal partial class SettingsWindow : Window
             StartupCheckBox.IsEnabled = StartupRegistration.CanRegister || StartupCheckBox.IsChecked == true;
             if (!StartupCheckBox.IsEnabled)
             {
-                ShowStartupStatus("請從 ArtPet.Windows.exe 啟動以設定開機啟動。");
+                ShowStartupStatus($"請從 {ReleaseUpdater.ExecutableName} 啟動以設定開機啟動。");
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or SecurityException)
@@ -372,8 +372,8 @@ internal partial class SettingsWindow : Window
             else
             {
                 var progress = new Progress<string>(message => VoicePackStatus.Text = message);
-                Version version = await Task.Run(() => AssetReleaseUpdater.DownloadVoiceAsync(language, progress, token), token);
-                VoicePackStatus.Text = $"配音 {version} 已可使用。";
+                var (version, alreadyCurrent) = await Task.Run(() => AssetReleaseUpdater.DownloadVoiceAsync(language, progress, token), token);
+                VoicePackStatus.Text = alreadyCurrent ? $"配音 {version} 已是最新版。" : $"配音 {version} 已可使用。";
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)

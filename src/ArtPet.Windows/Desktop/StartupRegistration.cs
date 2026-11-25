@@ -9,8 +9,9 @@ internal static class StartupRegistration
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "ArtPet";
 
-    internal static bool CanRegister => Environment.ProcessPath is { } path &&
-        string.Equals(Path.GetFileName(path), "ArtPet.Windows.exe", StringComparison.OrdinalIgnoreCase);
+    internal static bool CanRegister => Path.GetFileName(Environment.ProcessPath) is { } name &&
+        (name.Equals(ReleaseUpdater.ExecutableName, StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("ArtPet.Windows.exe", StringComparison.OrdinalIgnoreCase));
 
     internal static bool IsEnabled()
     {

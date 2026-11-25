@@ -20,7 +20,7 @@ internal static class ReleaseUpdater
 {
     private const string Repository = "JeffLiHK/art_pet";
     private const string AssetName = "ArtPet-win-x64.zip";
-    private const string ExecutableName = "ArtPet.Windows.exe";
+    internal const string ExecutableName = "ArtPet.exe";
 
     internal static Version CurrentVersion { get; } = typeof(ReleaseUpdater).Assembly.GetName().Version!;
 
@@ -201,6 +201,8 @@ internal static class ReleaseUpdater
 
         info.Environment["ARTPET_UPDATE_STAGE"] = staging;
         info.Environment["ARTPET_UPDATE_TARGET"] = target;
+        info.Environment["ARTPET_UPDATE_EXECUTABLE_NAME"] = ExecutableName;
+        info.Environment["ARTPET_UPDATE_PREVIOUS_EXECUTABLE"] = Environment.ProcessPath!;
         info.Environment["ARTPET_UPDATE_PROCESS"] = Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture);
         using Process installer = Process.Start(info) ?? throw new Win32Exception("Unable to start the updater.");
     }

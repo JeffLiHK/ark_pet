@@ -7,7 +7,7 @@ if ($stage.Parent.FullName.TrimEnd('\') -ne $target.FullName.TrimEnd('\') -or
     exit 1
 }
 
-$executable = [IO.Path]::Combine($target.FullName, 'ArtPet.Windows.exe')
+$executable = [IO.Path]::Combine($target.FullName, $env:ARTPET_UPDATE_EXECUTABLE_NAME)
 $payload = [IO.Path]::Combine($stage.FullName, 'payload')
 $backup = [IO.Path]::Combine($stage.FullName, 'backup')
 $journal = [Collections.Generic.List[object]]::new()
@@ -66,7 +66,7 @@ try {
         $failure += "`n備份位於 $backup"
     } elseif ($restart) {
         try {
-            Start-Process -FilePath $executable -WorkingDirectory $target.FullName
+            Start-Process -FilePath $env:ARTPET_UPDATE_PREVIOUS_EXECUTABLE -WorkingDirectory $target.FullName
         } catch {
             $failure += "`n請重新開啟 Art Pet。"
         }

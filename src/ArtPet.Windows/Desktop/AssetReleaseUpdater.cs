@@ -168,7 +168,8 @@ internal static class AssetReleaseUpdater
         }
     }
 
-    internal static async Task<Version> DownloadVoiceAsync(string language, IProgress<string> progress, CancellationToken token)
+    internal static async Task<(Version Version, bool AlreadyCurrent)> DownloadVoiceAsync(
+        string language, IProgress<string> progress, CancellationToken token)
     {
         await InstallGate.WaitAsync(token);
         try
@@ -183,6 +184,11 @@ internal static class AssetReleaseUpdater
                 throw new InvalidDataException("GitHub 尚未提供可驗證的獨立配音包。");
             }
 
+            if (VoiceLibrary.GetInstalled(language) is { } installed && installed.Version >= version)
+            {
+                return (installed.Version, true);
+            }
+
             using var contents = new MemoryStream();
             await GitHubReleaseSource.DownloadAsync(metadata, contents, token);
             contents.Position = 0;
@@ -192,12 +198,8 @@ internal static class AssetReleaseUpdater
             {
                 throw new InvalidDataException("目前的程式無法讀取這個配音版本。");
             }
-            if (VoiceLibrary.GetInstalled(language) is { } installed && installed.Version > version)
-            {
-                return installed.Version;
-            }
             await InstallVoicePackageAsync(language, version, package, progress, token);
-            return version;
+            return (version, false);
         }
         finally
         {

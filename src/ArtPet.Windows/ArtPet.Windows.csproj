@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Media/ArtPet.ico</ApplicationIcon>
-    <Version>1.6.0</Version>
+    <Version>1.7.0</Version>
     <HoolheyakCharacterFolder>霍爾海雅</HoolheyakCharacterFolder>
     <ProjectAssetsDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets</ProjectAssetsDirectory>
     <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)\character.json')">$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)</HoolheyakPackDirectory>
@@ -68,7 +68,7 @@
       <ResolvedFileToPublish Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('%(ResolvedFileToPublish.RelativePath)', '^resource[\\/]'))">
         <RelativePath>data\%(ResolvedFileToPublish.RelativePath)</RelativePath>
       </ResolvedFileToPublish>
-      <ResolvedFileToPublish Include="$(PublishLauncher)" RelativePath="$(AssemblyName).exe" CopyToPublishDirectory="PreserveNewest" IsKeyOutput="true" />
+      <ResolvedFileToPublish Include="$(PublishLauncher)" RelativePath="ArtPet.exe" CopyToPublishDirectory="PreserveNewest" IsKeyOutput="true" />
     </ItemGroup>
   </Target>
 </Project>
