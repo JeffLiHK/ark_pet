@@ -24,7 +24,7 @@ if (Test-Path -LiteralPath $outputPath) {
 }
 
 if ($minimumAppVersion -lt [version]'1.3.0') {
-    throw 'The Spine package requires ArtPet 1.3.0 or newer.'
+    throw 'The Spine package requires ArkPet 1.3.0 or newer.'
 }
 
 $source = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'HoolheyakSource.json')) | ConvertFrom-Json

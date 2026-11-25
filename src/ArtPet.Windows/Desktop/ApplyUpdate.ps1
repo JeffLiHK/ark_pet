@@ -18,7 +18,7 @@ $failure = $null
 try {
     $parent = Get-Process -Id ([int]$env:ARTPET_UPDATE_PROCESS) -ErrorAction SilentlyContinue
     if ($null -ne $parent -and -not $parent.WaitForExit(30000)) {
-        throw 'Art Pet 未能在更新時結束。'
+        throw 'ArkPet 未能在更新時結束。'
     }
     $restart = $true
 
@@ -68,7 +68,7 @@ try {
         try {
             Start-Process -FilePath $env:ARTPET_UPDATE_PREVIOUS_EXECUTABLE -WorkingDirectory $target.FullName
         } catch {
-            $failure += "`n請重新開啟 Art Pet。"
+            $failure += "`n請重新開啟 ArkPet。"
         }
     }
 } finally {
@@ -83,6 +83,6 @@ try {
 
 if ($null -ne $failure) {
     Add-Type -AssemblyName System.Windows.Forms
-    [void][Windows.Forms.MessageBox]::Show($failure, 'Art Pet 更新失敗')
+    [void][Windows.Forms.MessageBox]::Show($failure, 'ArkPet 更新失敗')
     exit 1
 }

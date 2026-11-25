@@ -48,7 +48,7 @@ internal partial class WardrobeWindow : Window
         }
         else
         {
-            Title = "Art Pet 模型影格";
+            Title = "ArkPet 模型影格";
         }
         Loaded += LoadCharacters;
     }

@@ -118,7 +118,7 @@ internal static class SpineFrameCache
             CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null, Path.Combine(ManagedCharacterAssets.RootDirectory, "renderer"), options)
                 .WaitAsync(token);
-            using var window = new HwndSource(new HwndSourceParameters("ArtPet Spine renderer", 1, 1)
+            using var window = new HwndSource(new HwndSourceParameters("ArkPet Spine renderer", 1, 1)
             {
                 WindowStyle = 0
             });

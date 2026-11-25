@@ -1,7 +1,7 @@
 <Window x:Class="ArtPet.Windows.Wardrobe.WardrobeWindow" x:ClassModifier="internal"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Art Pet 衣櫃" Width="470" Height="588" MinWidth="290" MinHeight="240"
+        Title="ArkPet 衣櫃" Width="470" Height="588" MinWidth="290" MinHeight="240"
         Background="#131B20" Foreground="#F5F5EE" FontFamily="Microsoft JhengHei UI, Segoe UI" FontSize="14"
         UseLayoutRounding="True" PreviewKeyDown="CloseOnEscape">
     <Window.Resources>

@@ -71,7 +71,7 @@ internal static class ProjectStorage
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            Trace.TraceWarning("Could not migrate Art Pet resources from {0} to {1}: {2}", source, destination, error.Message);
+            Trace.TraceWarning("Could not migrate ArkPet resources from {0} to {1}: {2}", source, destination, error.Message);
         }
     }
 

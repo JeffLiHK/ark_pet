@@ -18,7 +18,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if ([version]$MinAppVersion -lt [version]'1.3.3') {
-    throw 'Separate model and voice packages require ArtPet 1.3.3 or newer.'
+    throw 'Separate model and voice packages require ArkPet 1.3.3 or newer.'
 }
 $output = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 if (Test-Path -LiteralPath $output) {

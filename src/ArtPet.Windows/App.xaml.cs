@@ -200,8 +200,8 @@ public partial class App : Application
             return;
         }
 
-        if (MessageBox.Show($"有新版 Art Pet {update.Version.ToString(3)}。要下載更新並重新啟動嗎？",
-                "Art Pet", MessageBoxButton.YesNo, MessageBoxImage.Information, MessageBoxResult.No) == MessageBoxResult.Yes)
+        if (MessageBox.Show($"有新版 ArkPet {update.Version.ToString(3)}。要下載更新並重新啟動嗎？",
+                "ArkPet", MessageBoxButton.YesNo, MessageBoxImage.Information, MessageBoxResult.No) == MessageBoxResult.Yes)
         {
             OpenSettings();
             if (_settingsWindow is { } settings)

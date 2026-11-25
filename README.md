@@ -1,14 +1,14 @@
-# Art Pet 桌面寵物
+# ArkPet 桌面寵物
 
-Art Pet 是一款以《明日方舟》角色為主題的 Windows 桌面寵物。小人預設待在主螢幕右下角，會播放基建動畫。點一下可以摸摸，按住可以拖曳，也可以在衣櫃換角色和造型。
+ArkPet 是一款以《明日方舟》角色為主題的 Windows 桌面寵物。小人預設待在主螢幕右下角，會播放基建動畫。點一下可以摸摸，按住可以拖曳，也可以在衣櫃換角色和造型。
 
 ## 下載與安裝
 
-1. 前往 [GitHub 最新版本](https://github.com/JeffLiHK/art_pet/releases/latest)，在下載附件（Assets）選擇 `ArtPet-win-x64.zip`。發佈包適用於 Windows x64。
+1. 前往 [GitHub 最新版本](https://github.com/JeffLiHK/art_pet/releases/latest)，在下載附件（Assets）選擇 `ArtPet-win-x64.zip`。發佈包適用於 Windows x64。下載附件及執行檔沿用原名。
 2. 將整個 ZIP 解壓縮到想存放程式的資料夾，然後雙擊 `ArtPet.exe`。
 3. 首次啟動時請保持網路連線。程式會自動下載角色模型、立繪、字幕及日語配音，完成後會在桌面顯示小人。資源就緒後，平日使用可離線進行。
 
-若首次下載中斷，可從工作列通知區的 **Art Pet** 圖示開啟「設定 → 資源管理」，再按「更新全部模型」。若程式提示缺少 WebView2，請安裝 Runtime 後再試。 [Microsoft WebView2 下載頁](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section)
+若首次下載中斷，可從工作列通知區的 **ArkPet** 圖示開啟「設定 → 資源管理」，再按「更新全部模型」。若程式提示缺少 WebView2，請安裝 Runtime 後再試。 [Microsoft WebView2 下載頁](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download-section)
 
 ## 基本操作
 
@@ -17,7 +17,7 @@ Art Pet 是一款以《明日方舟》角色為主題的 Windows 桌面寵物。
 | 摸摸小人 | 短按小人，播放互動動畫。有配音的角色也會播放語音及顯示字幕。 |
 | 移動小人 | 按住左鍵拖曳。 |
 | 換角色或造型 | 右鍵點小人，開啟「衣櫃」。可按角色名稱搜尋，選好角色後再選造型。首次套用某些造型時，需要稍候生成動畫影格。 |
-| 隱藏、找回或結束 | 從工作列通知區的 **Art Pet** 圖示操作。找不到圖示時，先展開通知區的隱藏圖示。也可選「移回主螢幕右下角」。 |
+| 隱藏、找回或結束 | 從工作列通知區的 **ArkPet** 圖示操作。找不到圖示時，先展開通知區的隱藏圖示。也可選「移回主螢幕右下角」。 |
 | 讓滑鼠穿透小人 | 在「設定 → 一般」關閉「互動模式」。要恢復時，從通知區開啟設定。 |
 
 ## 更多功能

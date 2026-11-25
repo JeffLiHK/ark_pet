@@ -76,7 +76,7 @@ internal sealed class TrayIcon : IDisposable
             RefreshPetMenu(petsItem, getPets());
         };
 
-        _icon = new NotifyIcon { Text = "Art Pet", ContextMenuStrip = _menu };
+        _icon = new NotifyIcon { Text = "ArkPet", ContextMenuStrip = _menu };
         SetCharacterIcon(pet.Icon as BitmapSource);
         _icon.Visible = true;
         _icon.MouseDoubleClick += (_, e) =>
@@ -136,10 +136,10 @@ internal sealed class TrayIcon : IDisposable
     }
 
     internal void ShowSettingsSaveError() =>
-        _icon.ShowBalloonTip(3500, "Art Pet", "目前無法保存設定。重開後會恢復上次保存的設定。", ToolTipIcon.Warning);
+        _icon.ShowBalloonTip(3500, "ArkPet", "目前無法保存設定。重開後會恢復上次保存的設定。", ToolTipIcon.Warning);
 
     internal void ShowSetupStatus(string message) =>
-        _icon.ShowBalloonTip(5000, "Art Pet", message, ToolTipIcon.Info);
+        _icon.ShowBalloonTip(5000, "ArkPet", message, ToolTipIcon.Info);
 
     public void Dispose()
     {
