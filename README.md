@@ -4,7 +4,7 @@ ArkPet 是一款以《明日方舟》角色為主題的 Windows 桌面寵物。�
 
 ## 下載與安裝
 
-1. 前往 [GitHub 最新版本](https://github.com/JeffLiHK/art_pet/releases/latest)，在下載附件（Assets）選擇 `ArtPet-win-x64.zip`。發佈包適用於 Windows x64。下載附件及執行檔沿用原名。
+1. 前往 [GitHub 最新版本](https://github.com/JeffLiHK/ark_pet/releases/latest)，在下載附件（Assets）選擇 `ArtPet-win-x64.zip`。發佈包適用於 Windows x64。下載附件及執行檔沿用原名。
 2. 將整個 ZIP 解壓縮到想存放程式的資料夾，然後雙擊 `ArtPet.exe`。
 3. 首次啟動時請保持網路連線。程式會自動下載角色模型、立繪、字幕及日語配音，完成後會在桌面顯示小人。資源就緒後，平日使用可離線進行。
 
@@ -30,6 +30,6 @@ ArkPet 是一款以《明日方舟》角色為主題的 Windows 桌面寵物。�
 
 ## 更新程式
 
-在「設定 → 更新」按「檢查程式更新」。角色素材則在「設定 → 資源管理」按「更新全部模
+在「設定 → 更新」按「檢查程式更新」。角色素材則在「設定 → 資源管理」按「更新全部模型」。
 
-如果目前使用 `ArtPet.Windows.exe`，首次升級需手動安裝。先關閉舊版，把新版 ZIP 解壓縮到新資料夾，再將舊版的 `local-data`、`assets` 和 `resource` 下的素材資料夾（如有）複製到新資料夾的對應位置，然後執行 `ArtPet.exe`。曾開啟登入時啟動的話，請在新版設定中關閉再重新啟用。 [舊版升級說明](https://github.com/JeffLiHK/art_pet/releases/tag/v1.7.0)
+從 v1.7.0 或更早版本升級到改用新倉庫的版本時，請手動安裝一次。先關閉舊版，把新版 ZIP 解壓縮到新資料夾，再將舊版的 `local-data`、`assets` 和 `resource` 下的素材資料夾（如有）複製到新資料夾的對應位置，然後執行 `ArtPet.exe`。曾開啟登入時啟動的話，請在新版設定中關閉再重新啟用。之後可在程式內更新。 [舊版升級說明](https://github.com/JeffLiHK/ark_pet/releases/tag/v1.7.0)

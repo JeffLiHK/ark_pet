@@ -18,7 +18,7 @@ internal sealed record ReleaseCheck(ReleaseUpdate? Update, string Message, bool 
 
 internal static class ReleaseUpdater
 {
-    private const string Repository = "JeffLiHK/art_pet";
+    private const string Repository = "JeffLiHK/ark_pet";
     private const string AssetName = "ArtPet-win-x64.zip";
     internal const string ExecutableName = "ArtPet.exe";
 
