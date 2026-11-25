@@ -12,6 +12,7 @@ public partial class SproutVisual : UserControl
     internal const double ReactionMs = 620;
     private readonly Stopwatch _clock = new();
     private bool _reacting;
+    private RoamingAction _restingAction;
     private long _lastFrame;
 
     public SproutVisual()
@@ -39,6 +40,18 @@ public partial class SproutVisual : UserControl
         {
             CompositionTarget.Rendering -= UpdateFrame;
             _clock.Reset();
+        }
+    }
+
+    internal void SetRestingAction(RoamingAction action)
+    {
+        if (_restingAction != action)
+        {
+            _restingAction = action;
+            if (_clock.IsRunning && !_reacting)
+            {
+                DrawFrame();
+            }
         }
     }
 
@@ -112,9 +125,15 @@ public partial class SproutVisual : UserControl
         double phase = elapsed % IdleCycleMs;
         double breathing = (1 - Math.Cos(2 * Math.PI * phase / IdleCycleMs)) / 2;
         Hop.Y = 0;
-        Breath.ScaleX = 1 + 0.018 * breathing;
-        Breath.ScaleY = 1 - 0.045 * breathing;
-        Blink.ScaleY = phase is >= 2150 and < 2300 ? 0.18 : 1;
+        double restingHeight = _restingAction switch
+        {
+            RoamingAction.Sit => 0.82,
+            RoamingAction.Sleep => 0.64,
+            _ => 1
+        };
+        Breath.ScaleX = 1 + 0.16 * (1 - restingHeight) + 0.018 * breathing;
+        Breath.ScaleY = restingHeight * (1 - 0.045 * breathing);
+        Blink.ScaleY = _restingAction == RoamingAction.Sleep || phase is >= 2150 and < 2300 ? 0.18 : 1;
         Sparkles.Opacity = 0;
     }
 }

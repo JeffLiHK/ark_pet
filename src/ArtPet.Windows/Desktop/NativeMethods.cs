@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ArtPet.Windows.Desktop;
 
@@ -28,6 +30,9 @@ internal static class NativeMethods
     private const int ExtendedStyle = -20;
     private const int TransparentStyle = 0x00000020;
     private const int NoActivateStyle = 0x08000000;
+    private const int ToolWindowStyle = 0x00000080;
+    private const int ExtendedFrameBounds = 9;
+    private const int Cloaked = 14;
 
     internal static bool MoveWindow(IntPtr handle, int x, int y, bool deferErase = false)
     {
@@ -72,6 +77,52 @@ internal static class NativeMethods
         WindowBounds area = info.WorkArea;
         return Rectangle.FromLTRB(area.Left, area.Top, area.Right, area.Bottom);
     }
+
+    internal static List<DesktopWindow> GetDesktopWindows()
+    {
+        var windows = new List<DesktopWindow>();
+        var className = new StringBuilder(256);
+        EnumWindows((handle, _) =>
+        {
+            if (!IsWindowVisible(handle) || IsIconic(handle))
+            {
+                return true;
+            }
+
+            GetWindowThreadProcessId(handle, out uint processId);
+            if (processId == Environment.ProcessId ||
+                (DwmGetWindowAttribute(handle, Cloaked, out int cloaked, sizeof(int)) == 0 && cloaked != 0) ||
+                GetClassNameW(handle, className, className.Capacity) == 0)
+            {
+                return true;
+            }
+
+            string name = className.ToString();
+            bool taskbar = name is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd";
+            if (!taskbar && (name is "Progman" or "WorkerW" ||
+                (GetWindowLongW(handle, ExtendedStyle) & (ToolWindowStyle | NoActivateStyle | TransparentStyle)) != 0))
+            {
+                return true;
+            }
+
+            // Explorer's taskbar rectangle tracks its visible position during auto-hide.
+            bool hasBounds = taskbar
+                ? GetWindowRect(handle, out WindowBounds bounds)
+                : DwmGetWindowAttribute(handle, ExtendedFrameBounds, out bounds, Marshal.SizeOf<WindowBounds>()) == 0
+                    || GetWindowRect(handle, out bounds);
+            if (hasBounds && bounds.Width > 0 && bounds.Height > 0)
+            {
+                windows.Add(new DesktopWindow(handle, Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom),
+                    taskbar ? DesktopSurfaceKind.Taskbar : DesktopSurfaceKind.Window));
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return windows;
+    }
+
+    internal readonly record struct DesktopWindow(IntPtr Handle, Rectangle Bounds, DesktopSurfaceKind Kind);
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct WindowBounds
@@ -131,6 +182,33 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private delegate bool EnumWindowsCallback(IntPtr handle, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsCallback callback, IntPtr parameter);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    private static extern int GetClassNameW(IntPtr handle, StringBuilder className, int maxCount);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out int value, int size);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr handle, int attribute, out WindowBounds value, int size);
 
     [DllImport("user32.dll")]
     private static extern int GetWindowLongW(IntPtr handle, int index);

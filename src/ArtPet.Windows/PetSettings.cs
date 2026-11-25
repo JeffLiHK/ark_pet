@@ -28,6 +28,7 @@ internal sealed record PetSettings
     public int IdleLoopsPerAction { get; init; } = DefaultIdleLoopsPerAction;
     public bool InteractionEnabled { get; init; } = true;
     public bool FreeModeEnabled { get; init; }
+    public bool PhysicsModeEnabled { get; init; }
     public int WalkingSpeedPercent { get; init; } = DefaultWalkingSpeedPercent;
     public int OutlineLevel { get; init; }
     public int ShadowLevel { get; init; }

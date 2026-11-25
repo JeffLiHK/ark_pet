@@ -12,7 +12,8 @@ internal enum RoamingAction
 {
     Idle,
     Walk,
-    Sleep
+    Sleep,
+    Sit
 }
 
 internal sealed class FramePlayer
@@ -29,6 +30,7 @@ internal sealed class FramePlayer
     private bool _playingTouch;
     private RoamingAction _roamingAction;
     private bool _freeMode;
+    private bool _physicsMode;
     private int _index;
     private int _idleClipIndex;
 
@@ -47,10 +49,11 @@ internal sealed class FramePlayer
     internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
     internal int IdleLoopsPerAction { get; set; } = PetSettings.DefaultIdleLoopsPerAction;
 
-    internal void SetFreeMode(bool enabled)
+    internal void SetMovementModes(bool freeMode, bool physicsMode)
     {
-        _freeMode = enabled;
-        if (enabled && _outfit is { Move: not null } outfit && _idleClipIndex != 0)
+        _freeMode = freeMode;
+        _physicsMode = physicsMode;
+        if ((physicsMode || freeMode && CanWalk) && _outfit is { } outfit && _idleClipIndex != 0)
         {
             _idleClipIndex = 0;
             if (!_playingTouch && _clip is not null)
@@ -62,7 +65,7 @@ internal sealed class FramePlayer
 
     internal void SetRoamingAction(RoamingAction action)
     {
-        if (_roamingAction == action || _clip is null || _outfit is not { Move: not null } outfit)
+        if (_roamingAction == action || _clip is null || _outfit is not { } outfit)
         {
             return;
         }
@@ -79,7 +82,8 @@ internal sealed class FramePlayer
     private FrameClip GetRestingClip(LoadedOutfit outfit) => _roamingAction switch
     {
         RoamingAction.Walk => outfit.Move ?? outfit.Idle,
-        RoamingAction.Sleep => outfit.Sleep ?? outfit.Idle,
+        RoamingAction.Sleep => outfit.Sleep ?? outfit.Sit ?? outfit.Idle,
+        RoamingAction.Sit => outfit.Sit ?? outfit.Idle,
         _ => outfit.IdleClips[_idleClipIndex]
     };
 
@@ -211,7 +215,7 @@ internal sealed class FramePlayer
             return;
         }
 
-        if (!_playingTouch && !(_freeMode && CanWalk) && outfit.IdleClips.Count > 1 &&
+        if (!_playingTouch && !_physicsMode && !(_freeMode && CanWalk) && outfit.IdleClips.Count > 1 &&
             elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
         {
             BeginNextIdleClip(outfit, now);
