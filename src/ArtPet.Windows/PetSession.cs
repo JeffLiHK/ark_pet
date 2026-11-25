@@ -22,7 +22,7 @@ internal sealed class PetSession : IDisposable
 
     internal bool HasLoadError(CharacterPack pack, OutfitDefinition outfit) => _failedOutfits.Contains((pack, outfit.Id));
 
-    internal async Task SelectAsync(CharacterPack pack, OutfitDefinition outfit)
+    internal async Task SelectAsync(CharacterPack pack, OutfitDefinition outfit, CancellationToken token = default)
     {
         if (PendingSelection == (pack, outfit))
         {
@@ -38,7 +38,9 @@ internal sealed class PetSession : IDisposable
             return;
         }
 
-        using var request = new CancellationTokenSource();
+        using var request = token.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(token)
+            : new CancellationTokenSource();
         _request = request;
         PendingSelection = (pack, outfit);
         _failedOutfits.Remove((pack, outfit.Id));
@@ -50,7 +52,7 @@ internal sealed class PetSession : IDisposable
             try
             {
                 LoadedOutfit loaded = await Task.Run(() => pack.LoadOutfitAsync(outfit, request.Token), request.Token);
-                if (_request == request)
+                if (_request == request && !request.IsCancellationRequested)
                 {
                     Pack = pack;
                     Outfit = loaded;

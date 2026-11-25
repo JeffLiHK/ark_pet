@@ -1,10 +1,10 @@
 # Art Pet 桌面寵物
 
-Art Pet 啟動後，寵物會在主螢幕工作列附近待機。程式內建「小芽」，安裝霍爾海雅美術資源後，霍爾海雅會隨機輪播 Idle、Move、Sit 和 Sleep。短按可播放基建互動與語音，按住可拖曳。衣櫃可選角色與造型。桌面功能可離線使用，下載和檢查更新需要網路連線。
+Art Pet 首次取得資源時會自動下載最新版模型和日語配音。選擇造型後，寵物會在主螢幕工作列附近待機。短按可播放基建互動與語音，按住可拖曳。衣櫃支援按角色名稱搜尋，再選擇造型。資源管理沿用角色和造型卡片，提供建立及刪除動畫影格。桌面功能可離線使用，下載和檢查更新需要網路連線。
 
 ## 啟動與操作
 
-日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先從 `local-data/assets/霍爾海雅` 載入預設造型、精英二立繪、歷世流風和恆久祭禮。精英二有自己的立繪，並共用預設造型的基建模型與動畫。舊版 `local-data/assets/hoolheyak/desktop-60` 和 `desktop` 仍可載入，素材缺失時會顯示原創的「小芽」。
+日常除錯與測試直接從專案根目錄執行以下指令，需要 .NET 10 SDK `10.0.4xx`。開發版優先從 `local-data/assets/霍爾海雅` 載入預設造型、精英二立繪、歷世流風和恆久祭禮。精英二有自己的立繪，並共用預設造型的基建模型與動畫。舊版 `local-data/assets/hoolheyak/desktop-60` 和 `desktop` 仍可載入，沒有可用造型時，可從通知區開啟設定或衣櫃。
 
 ```powershell
 dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
@@ -42,7 +42,7 @@ dotnet run --file scripts/ValidateHoolheyakPack.cs -- 'local-data/assets/霍爾�
 dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -p:BundleHoolheyak=true -o artifacts/ArtPet-win-x64
 ```
 
-重新打包後，可開啟 `artifacts/ArtPet-win-x64/ArtPet.Windows.exe`。自包含資料夾內有霍爾海雅的造型素材和執行環境。如果把測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
+重新打包後，可開啟 `artifacts/ArtPet-win-x64/ArtPet.Windows.exe`。程式依賴和 .NET 執行環境位於 `data`，霍爾海雅的造型素材位於 `resource/assets`，授權文件位於 `resource/licenses`。如果把測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
 
 ### GitHub 更新包
 
@@ -55,18 +55,18 @@ dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --
 Compress-Archive -Path artifacts/program-v1.3.0/publish/* -DestinationPath artifacts/program-v1.3.0/ArtPet-win-x64.zip
 ```
 
-將 `ArtPet-win-x64.zip` 上傳到 `JeffLiHK/art_pet` 的公開正式 Release，程式升級會保留既有的角色素材及設定。
+將 `ArtPet-win-x64.zip` 上傳到 `JeffLiHK/art_pet` 的公開正式 Release。程式包根目錄包含 `ArtPet.Windows.exe`、`data` 和 `resource`。從舊式平鋪版本首次升級時，請把 ZIP 解壓到新資料夾，並把舊安裝目錄中的 `local-data` 和 `assets`（如有）移過去。採用這個目錄結構的版本支援後續的程式內更新。
 
 完整資源用獨立版本發佈。先準備角色素材和語音，再打包資源 ZIP 和相容性清單。
 
 ```powershell
 pwsh -File scripts/ImportHoolheyakVoice.ps1
-pwsh -File scripts/BuildArtworkAssetRelease.ps1 -AssetVersion 1.2.0 -MinAppVersion 1.3.2
+pwsh -File scripts/BuildArtworkAssetRelease.ps1 -AssetVersion 1.2.1 -MinAppVersion 1.3.3
 ```
 
 腳本輸出 `ArtPet-assets.zip`（角色、圖片、圖示及兩種字幕）、`ArtPet-voice-ja.zip`（日語配音）、`ArtPet-voice-zh-CN.zip`（普通話配音）和 `assets-manifest.json`。在同一個資源 Release 上傳四個附件。新增官方角色時，將含 `character.json` 的角色資料夾放入 `local-data/release-characters/<角色 ID>/`。同名資料夾可提供現有角色的替換素材。Spine 角色可隨包提供 `portraits/<造型 ID>.png`、`previews/<造型 ID>.png` 和 `icons/<造型 ID>.ico`，其他版本可在造型清單指定圖片。共用圖片可放入 `local-data/release-images/`，應用程式圖示可用 `-AppIcon` 指定。新增角色的語音可放在 `local-data/voices/<角色 ID>/<語言代碼>/`，或透過 `-VoiceDirectory` 指定準備好的語音根目錄。
 
-程式在 `local-data/managed-assets/` 分開保存模型原始素材、按需生成的影格和已下載的配音。共用資源驗證完成才切換版本，啟動時若共用資源不完整，會嘗試上一個版本、隨附素材及本機匯入素材。檔案總管顯示的 EXE 內嵌圖示由程式 Release 更新。 [完整發佈流程](AGENTS.md#publish-github-releases)
+正式版在執行檔旁的 `resource/managed-assets/` 下載、解壓和安裝模型、立繪、字幕和配音，並在同一處存放按需生成的影格。手動匯入的角色素材和配音可放在 `resource/imported-assets/` 和 `resource/voices/`。升級後首次啟動時，程式會把舊安裝目錄內的資源移到 `resource/`，目的資料夾已有內容時，舊資源會留在原處。開發版繼續使用專案的 `local-data/`。共用資源驗證完成才切換版本，啟動時若共用資源不完整，會嘗試上一個版本、隨附素材及本機匯入素材。檔案總管顯示的 EXE 內嵌圖示由程式 Release 更新。 [完整發佈流程](AGENTS.md#publish-github-releases)
 
 ## 驗收條件
 

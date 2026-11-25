@@ -19,7 +19,7 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
     }
 
     window.renderer = {
-        async load({ id, atlas, texture, png, binary }) {
+        async load({ id, atlas, texture, png, skeletonData }) {
             const bytes = Uint8Array.from(atob(png), char => char.charCodeAt(0));
             // Decode without waiting for a visible document or multiplying the texture's alpha again.
             const image = await createImageBitmap(new Blob([bytes], { type: "image/png" }), { premultiplyAlpha: "none" });
@@ -28,8 +28,13 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
                 // Ark-Models PNGs already contain premultiplied alpha.
                 return new spine.webgl.GLTexture(scene.context, image);
             });
-            const reader = new spine.SkeletonBinary(new spine.AtlasAttachmentLoader(textureAtlas));
-            const data = reader.readSkeletonData(Uint8Array.from(atob(binary), char => char.charCodeAt(0)));
+            const attachmentLoader = new spine.AtlasAttachmentLoader(textureAtlas);
+            const skeletonBytes = Uint8Array.from(atob(skeletonData), char => char.charCodeAt(0));
+            // Some source packs use the .skel filename for Spine JSON exports.
+            const prefix = new TextDecoder().decode(skeletonBytes.subarray(0, 64));
+            const data = /^\s*\{\s*"/.test(prefix)
+                ? new spine.SkeletonJson(attachmentLoader).readSkeletonData(new TextDecoder().decode(skeletonBytes))
+                : new spine.SkeletonBinary(attachmentLoader).readSkeletonData(skeletonBytes);
             const skeleton = new spine.Skeleton(data);
             const clips = {};
             const counts = {};

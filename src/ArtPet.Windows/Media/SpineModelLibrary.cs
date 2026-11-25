@@ -13,14 +13,16 @@ internal sealed class SpineModelLibrary(string source, string cache, SpineFrameC
     private readonly Dictionary<string, string> _modelsByOutfit =
         definition.Outfits.ToDictionary(outfit => outfit.Id, outfit => outfit.ModelId, StringComparer.Ordinal);
 
-    internal IEnumerable<SpineModelChoice> Models => definition.Outfits.GroupBy(outfit => outfit.ModelId)
-        .Select(group => new SpineModelChoice(this, group.Key,
-            $"{definition.DisplayName} · {string.Join(" / ", group.Select(outfit => outfit.DisplayName))}"));
+    internal Task ManageOutfitAsync(OutfitDefinition outfit, bool remove, CancellationToken token) =>
+        remove ? DeleteAsync(_modelsByOutfit[outfit.Id], token) : BuildAsync(_modelsByOutfit[outfit.Id], token);
+
+    internal bool ShareModel(OutfitDefinition first, OutfitDefinition second) =>
+        _modelsByOutfit[first.Id] == _modelsByOutfit[second.Id];
 
     internal bool IsOutfitBuilt(OutfitDefinition outfit) => IsBuilt(_modelsByOutfit[outfit.Id]);
     internal bool IsBuilt(string modelId) => File.Exists(Path.Combine(ModelDirectory(modelId), "character.json"));
 
-    internal async Task BuildAsync(string modelId, CancellationToken token)
+    private async Task BuildAsync(string modelId, CancellationToken token)
     {
         await Gate.WaitAsync(token);
         try
@@ -48,7 +50,7 @@ internal sealed class SpineModelLibrary(string source, string cache, SpineFrameC
         }
     }
 
-    internal async Task DeleteAsync(string modelId, CancellationToken token)
+    private async Task DeleteAsync(string modelId, CancellationToken token)
     {
         await Gate.WaitAsync(token);
         try
@@ -100,5 +102,3 @@ internal sealed class SpineModelLibrary(string source, string cache, SpineFrameC
         _modelsByOutfit.ContainsValue(modelId) ? Path.Combine(cache, modelId) :
             throw new ArgumentException("Unknown Spine model.", nameof(modelId));
 }
-
-internal sealed record SpineModelChoice(SpineModelLibrary Library, string Id, string DisplayName);

@@ -18,17 +18,26 @@ internal static class AssetReleaseUpdater
     private const string Repository = "JeffLiHK/art_pet_assets";
     private const string ArchiveName = "ArtPet-assets.zip";
     private const string LegacyArchiveName = "ArtPet-hoolheyak-assets.zip";
-    private const long MaximumArchiveSize = 512L * 1024 * 1024;
-    private const long MaximumExtractedSize = 1024L * 1024 * 1024;
-    private const int MaximumEntries = 20_000;
+    private const long MaximumArchiveSize = 2L * 1024 * 1024 * 1024 - 1;
+    private const long MaximumExtractedSize = 4L * 1024 * 1024 * 1024;
+    private const int MaximumEntries = 100_000;
     private static readonly SemaphoreSlim InstallGate = new(1);
     private static AssetInstallation? _pending;
 
     internal static AssetInstallation? Pending => Volatile.Read(ref _pending);
 
+    internal static void ConfirmRunning(AssetInstallation? running)
+    {
+        if (running is not null && Pending is { } pending && pending == running)
+        {
+            Interlocked.CompareExchange(ref _pending, null, pending);
+        }
+    }
+
     internal static async Task<AssetReleaseCheck> CheckAsync(AssetInstallation? running, CancellationToken token)
     {
-        GitHubRelease? release = await GitHubReleaseSource.GetLatestAsync(Repository, token);
+        GitHubRelease? release = await GitHubReleaseSource.GetLatestAsync(Repository, token,
+            ManagedCharacterAssets.ManifestName, ArchiveName, LegacyArchiveName, VoiceArchiveName(PetSettings.Japanese));
         if (release is null)
         {
             return new(null, "GitHub 目前沒有可下載的資源。");
@@ -81,13 +90,13 @@ internal static class AssetReleaseUpdater
             return new(null, "GitHub 尚未提供可驗證的資源包。");
         }
 
-        ReleasePackage? defaultVoice = manifest.HasSplitResources && !VoiceLibrary.HasChoice(PetSettings.Japanese)
+        ReleasePackage? defaultVoice = manifest.HasSplitResources
             ? FindVoicePackage(release, PetSettings.Japanese) : null;
         return new(new(manifest, package, defaultVoice), $"找到資源 {version}。");
     }
 
     internal static async Task InstallAsync(AssetReleaseUpdate update, AssetInstallation? running,
-        IProgress<string> progress, CancellationToken token)
+        IProgress<string> progress, CancellationToken token, bool requireJapaneseVoice = false)
     {
         await InstallGate.WaitAsync(token);
         string staging = Path.Combine(ManagedCharacterAssets.RootDirectory, $".stage-{Guid.NewGuid():N}");
@@ -103,9 +112,11 @@ internal static class AssetReleaseUpdater
             string archive = Path.Combine(staging, ArchiveName);
             await using (FileStream file = File.Create(archive))
             {
-                await GitHubReleaseSource.DownloadAsync(update.Package, file, token);
+                await GitHubReleaseSource.DownloadAsync(update.Package, file, token,
+                    percentage => progress.Report($"正在下載模型資源… {percentage}%"));
             }
 
+            progress.Report("正在解壓縮並驗證模型資源…");
             string payload = Path.Combine(staging, "payload");
             ExtractPackage(archive, payload, update.Manifest.SchemaVersion, token);
             if (update.Manifest.IsCatalog)
@@ -128,14 +139,20 @@ internal static class AssetReleaseUpdater
                 pack.ValidateArtwork(token);
             }
 
-            if (update.DefaultVoice is { } voice && !VoiceLibrary.HasChoice(PetSettings.Japanese))
+            bool needsJapanese = requireJapaneseVoice
+                ? !(VoiceLibrary.GetInstalled(PetSettings.Japanese)?.Version >= update.Manifest.AssetVersion)
+                : !VoiceLibrary.HasChoice(PetSettings.Japanese);
+            if (update.Manifest.HasSplitResources && needsJapanese && requireJapaneseVoice && update.DefaultVoice is null)
             {
-                progress.Report("正在下載日語配音…");
+                throw new InvalidDataException("GitHub 尚未提供可驗證的日語配音包。");
+            }
+            if (needsJapanese && update.DefaultVoice is { } voice)
+            {
                 try
                 {
-                    await InstallVoicePackageAsync(PetSettings.Japanese, update.Manifest.AssetVersion, voice, token);
+                    await InstallVoicePackageAsync(PetSettings.Japanese, update.Manifest.AssetVersion, voice, progress, token);
                 }
-                catch (Exception error) when (!token.IsCancellationRequested &&
+                catch (Exception error) when (!requireJapaneseVoice && !token.IsCancellationRequested &&
                     (error is HttpRequestException or OperationCanceledException || CharacterPack.IsAssetError(error)))
                 {
                     progress.Report("日語配音下載失敗，可在語音資源重試。");
@@ -151,12 +168,13 @@ internal static class AssetReleaseUpdater
         }
     }
 
-    internal static async Task<Version> DownloadVoiceAsync(string language, CancellationToken token)
+    internal static async Task<Version> DownloadVoiceAsync(string language, IProgress<string> progress, CancellationToken token)
     {
         await InstallGate.WaitAsync(token);
         try
         {
-            GitHubRelease? release = await GitHubReleaseSource.GetLatestAsync(Repository, token);
+            GitHubRelease? release = await GitHubReleaseSource.GetLatestAsync(Repository, token,
+                ManagedCharacterAssets.ManifestName, VoiceArchiveName(language));
             if (release is null || release.Tag is not { Length: > 1 } tag || tag[0] != 'v' ||
                 !Version.TryParse(tag[1..], out Version? version) || !AssetReleaseManifest.IsReleaseVersion(version) ||
                 GitHubReleaseSource.FindPackage(Repository, release, ManagedCharacterAssets.ManifestName) is not { Size: <= 16 * 1024 } metadata ||
@@ -178,7 +196,7 @@ internal static class AssetReleaseUpdater
             {
                 return installed.Version;
             }
-            await InstallVoicePackageAsync(language, version, package, token);
+            await InstallVoicePackageAsync(language, version, package, progress, token);
             return version;
         }
         finally
@@ -203,20 +221,26 @@ internal static class AssetReleaseUpdater
 
     private static ReleasePackage? FindVoicePackage(GitHubRelease release, string language) =>
         VoiceAssets.IsAudioLanguage(language) &&
-        GitHubReleaseSource.FindPackage(Repository, release, $"ArtPet-voice-{language}.zip") is { Size: <= MaximumArchiveSize } package
+        GitHubReleaseSource.FindPackage(Repository, release, VoiceArchiveName(language)) is { Size: <= MaximumArchiveSize } package
             ? package : null;
 
-    private static async Task InstallVoicePackageAsync(string language, Version version, ReleasePackage package, CancellationToken token)
+    private static string VoiceArchiveName(string language) => $"ArtPet-voice-{language}.zip";
+
+    private static async Task InstallVoicePackageAsync(string language, Version version, ReleasePackage package,
+        IProgress<string> progress, CancellationToken token)
     {
         string staging = Path.Combine(ManagedCharacterAssets.RootDirectory, $".voice-stage-{Guid.NewGuid():N}");
         Directory.CreateDirectory(staging);
         try
         {
             string archive = Path.Combine(staging, "voice.zip");
+            string voiceName = language == PetSettings.Japanese ? "日語配音" : "普通話配音";
             await using (FileStream file = File.Create(archive))
             {
-                await GitHubReleaseSource.DownloadAsync(package, file, token);
+                await GitHubReleaseSource.DownloadAsync(package, file, token,
+                    percentage => progress.Report($"正在下載{voiceName}… {percentage}%"));
             }
+            progress.Report($"正在解壓縮並驗證{voiceName}…");
             string payload = Path.Combine(staging, "payload");
             ExtractPackage(archive, payload, ArtworkCatalog.SplitResourceSchemaVersion, token, language);
             VoiceAssets.Validate(payload, null, token, audioLanguage: language);

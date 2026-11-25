@@ -53,7 +53,7 @@ internal sealed class FramePlayer
     {
         _freeMode = freeMode;
         _physicsMode = physicsMode;
-        if ((physicsMode || freeMode && CanWalk) && _outfit is { } outfit && _idleClipIndex != 0)
+        if ((physicsMode || freeMode) && _outfit is { } outfit && _idleClipIndex != 0)
         {
             _idleClipIndex = 0;
             if (!_playingTouch && _clip is not null)
@@ -215,7 +215,7 @@ internal sealed class FramePlayer
             return;
         }
 
-        if (!_playingTouch && !_physicsMode && !(_freeMode && CanWalk) && outfit.IdleClips.Count > 1 &&
+        if (!_playingTouch && !_physicsMode && !_freeMode && outfit.IdleClips.Count > 1 &&
             elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
         {
             BeginNextIdleClip(outfit, now);

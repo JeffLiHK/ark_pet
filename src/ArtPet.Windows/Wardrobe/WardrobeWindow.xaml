@@ -44,6 +44,38 @@
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
+        <Style x:Key="ProfessionFilterItem" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="#263137" />
+            <Setter Property="BorderBrush" Value="#495A60" />
+            <Setter Property="Foreground" Value="#F5F5EE" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Margin" Value="0,0,2,0" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="ToolTip" Value="{Binding Name}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="#93AAA7" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#35534E" />
+                    <Setter Property="BorderBrush" Value="#7EDEC3" />
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#FFF2C2" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <RadialGradientBrush x:Key="PreviewBackground" Center="0.5,0.43" RadiusX="0.72" RadiusY="0.72">
             <GradientStop Color="#63847C" Offset="0" />
             <GradientStop Color="#293F40" Offset="1" />
@@ -83,6 +115,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Border BorderBrush="#405350" BorderThickness="0,0,0,1" Padding="0,0,6,11" Margin="0,0,0,14">
             <DockPanel LastChildFill="True">
@@ -97,6 +130,38 @@
                       HorizontalScrollBarVisibility="Disabled">
             <Grid>
                 <StackPanel x:Name="CharacterPage">
+                    <Label x:Name="SearchLabel" Content="搜尋角色名稱" Target="{Binding ElementName=CharacterSearch}"
+                           Foreground="#D6E4DF" Padding="0,0,0,4" />
+                    <TextBox x:Name="CharacterSearch" Margin="0,0,12,6" Padding="7,4"
+                             Background="#263137" Foreground="#F5F5EE" BorderBrush="#495A60"
+                             CaretBrush="#F5F5EE" TextChanged="FilterCharacters"
+                             AutomationProperties.LabeledBy="{Binding ElementName=SearchLabel}" />
+                    <ListBox x:Name="ProfessionFilter" Margin="0,0,10,12" Padding="0" Background="Transparent"
+                             BorderThickness="0" SelectedValuePath="Id" SelectionChanged="FilterCharacters"
+                             AutomationProperties.Name="職業篩選" ItemContainerStyle="{StaticResource ProfessionFilterItem}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Rows="1" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid>
+                                    <Image x:Name="ProfessionIcon" Source="{Binding Icon}" Width="20" Height="20" />
+                                    <TextBlock x:Name="AllLabel" Text="{Binding Name}" FontSize="11" Visibility="Collapsed"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Id}" Value="">
+                                        <Setter TargetName="ProfessionIcon" Property="Visibility" Value="Collapsed" />
+                                        <Setter TargetName="AllLabel" Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                     <ItemsControl x:Name="Characters" ItemsPanel="{StaticResource CardPanel}"
                                   KeyboardNavigation.DirectionalNavigation="Cycle">
                         <ItemsControl.ItemTemplate>
@@ -156,5 +221,15 @@
                 </ItemsControl>
             </Grid>
         </ScrollViewer>
+        <StackPanel x:Name="ModelActions" Grid.Row="2" Visibility="Collapsed" Margin="0,8,6,8">
+            <TextBlock x:Name="ModelStatus" Foreground="#D6E4DF" TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Polite" Margin="0,0,0,8" />
+            <WrapPanel>
+                <Button x:Name="BuildModelButton" Style="{StaticResource BackButtonStyle}"
+                        Content="建置影格" Click="BuildModel" />
+                <Button x:Name="DeleteModelButton" Style="{StaticResource BackButtonStyle}"
+                        Content="刪除影格" Click="DeleteModel" Margin="8,0,0,0" />
+            </WrapPanel>
+        </StackPanel>
     </Grid>
 </Window>

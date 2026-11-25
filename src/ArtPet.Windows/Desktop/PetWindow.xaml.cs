@@ -26,8 +26,6 @@ public partial class PetWindow : Window
     private const double DefaultSizeDip = 160;
     private const int GesturePollIntervalMs = 8;
     private const int EffectPaddingDip = 16;
-    // The resting artwork inside SproutVisual's 160 by 160 viewbox.
-    private static readonly Rect SproutArtwork = new(26 / 160.0, 34 / 160.0, 108 / 160.0, 116 / 160.0);
     private readonly FramePlayer _player;
     private readonly PetVoicePlayer _voice;
     private readonly int _placementSlot;
@@ -40,7 +38,7 @@ public partial class PetWindow : Window
     private bool _dragging;
     private bool _placementCheckPending;
     private ScaleAnchor _scaleAnchor = new(0.5, 0.91);
-    private Rect _artworkBounds = SproutArtwork;
+    private Rect _artworkBounds = new(0, 0, 1, 1);
     private int _effectPadding;
 
     public PetWindow() : this(0)
@@ -55,8 +53,7 @@ public partial class PetWindow : Window
         _voice = new PetVoicePlayer(SetVoiceSubtitle, voiceRoot);
         ContextMenu.Opened += (_, _) => PauseRoaming();
         VoiceBubble.CustomPopupPlacementCallback = PlaceVoiceBubble;
-        // An open WPF popup does not follow its placement target when the window moves.
-        LocationChanged += (_, _) => _voice.Stop();
+        LocationChanged += (_, _) => RepositionVoiceBubble();
 
         IsVisibleChanged += UpdateVisibility;
 
@@ -92,7 +89,6 @@ public partial class PetWindow : Window
         _voice.SetVolume(settings.VoiceVolumePercent);
         _player.FramesPerSecond = settings.AnimationFps;
         _player.IdleLoopsPerAction = settings.IdleLoopsPerAction;
-        PetArt.FramesPerSecond = settings.AnimationFps;
         ResizePet(DefaultSizeDip * settings.SizePercent / PetSettings.DefaultSize);
         if (physicsModeChanged)
         {
@@ -144,7 +140,6 @@ public partial class PetWindow : Window
             ContextMenu.IsOpen = false;
             _voice.Stop();
             _player.CancelReaction();
-            PetArt.CancelReaction();
         }
     }
 
@@ -183,8 +178,6 @@ public partial class PetWindow : Window
             MovePet(bounds, bounds.Left, bounds.Top + offset);
         }
 
-        PetArt.Stop();
-        PetArt.Visibility = Visibility.Collapsed;
         _player.SetOutfit(outfit, IsVisible);
         RefreshRoaming();
         if (IsVisible)
@@ -219,8 +212,15 @@ public partial class PetWindow : Window
 
     private void TurnPet(object sender, RoutedEventArgs e) => TurnAround();
 
+    internal bool HasOutfit => _player.HasOutfit;
+
     public void ShowPet(bool resetPosition = false)
     {
+        if (!_player.HasOutfit)
+        {
+            return;
+        }
+
         StopGesture();
         PauseRoaming();
         new WindowInteropHelper(this).EnsureHandle();
@@ -255,7 +255,6 @@ public partial class PetWindow : Window
         StopGesture();
         StopRoaming();
         _voice.Stop();
-        PetArt.Stop();
         _player.Stop();
         SystemEvents.DisplaySettingsChanged -= DisplaySettingsChanged;
         _source?.RemoveHook(WindowMessage);
@@ -295,6 +294,16 @@ public partial class PetWindow : Window
     {
         VoiceSubtitle.Text = subtitle ?? string.Empty;
         VoiceBubble.IsOpen = !string.IsNullOrWhiteSpace(subtitle) && IsVisible;
+    }
+
+    private void RepositionVoiceBubble()
+    {
+        if (VoiceBubble.IsOpen)
+        {
+            // Changing an offset makes WPF recalculate the open popup's screen position.
+            VoiceBubble.HorizontalOffset = 1;
+            VoiceBubble.HorizontalOffset = 0;
+        }
     }
 
     private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -498,17 +507,10 @@ public partial class PetWindow : Window
         bool touched = !_dragging && NativeMethods.WindowFromPoint(cursor) == _handle;
         StopGesture();
 
-        if (touched)
+        if (touched && _player.HasOutfit)
         {
-            if (_player.HasOutfit)
-            {
-                _player.React();
-                await _voice.PlayRandomAsync();
-            }
-            else
-            {
-                PetArt.React();
-            }
+            _player.React();
+            await _voice.PlayRandomAsync();
         }
     }
 
@@ -521,7 +523,7 @@ public partial class PetWindow : Window
             ResetPhysicsPosition();
             if (Settings.PhysicsModeEnabled)
             {
-                SetRestingAction(RoamingAction.Idle);
+                _player.SetRoamingAction(RoamingAction.Idle);
             }
         }
 
@@ -555,20 +557,12 @@ public partial class PetWindow : Window
     {
         if (IsVisible)
         {
-            if (_player.HasOutfit)
-            {
-                _player.Start();
-            }
-            else
-            {
-                PetArt.Start();
-            }
+            _player.Start();
         }
         else
         {
             StopGesture();
             _voice.Stop();
-            PetArt.Stop();
             _player.Stop();
         }
 

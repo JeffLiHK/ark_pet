@@ -11,7 +11,9 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using ArtPet.Windows.Media;
+using ArtPet.Windows.Wardrobe;
 
 namespace ArtPet.Windows.Desktop;
 
@@ -22,8 +24,10 @@ internal partial class SettingsWindow : Window
     private readonly AssetInstallation? _installedArtwork;
     private readonly Action _stopVoice;
     private ReleaseUpdate? _availableUpdate;
+    private CharacterPack[] _modelPacks = [];
     private bool _checkingProgram;
     private bool _installing;
+    private int _storageRefresh;
 
     internal SettingsWindow(PetSettings settings, AssetSnapshot? artwork, Action stopVoice)
     {
@@ -53,9 +57,13 @@ internal partial class SettingsWindow : Window
         ReadStartup();
         CurrentVersionText.Text = $"程式 {ReleaseUpdater.CurrentVersion.ToString(3)}";
         RefreshAssetVersion();
-        SetModelChoices(artwork);
+        _modelPacks = artwork?.Packs ?? [];
         RefreshResourceControls();
-        Activated += (_, _) => RefreshResourceControls();
+        Activated += async (_, _) =>
+        {
+            RefreshResourceControls();
+            await RefreshStorageUsageAsync(_updates.Token);
+        };
         if (AssetReleaseUpdater.Pending is not null)
         {
             Loaded += async (_, _) =>
@@ -81,6 +89,36 @@ internal partial class SettingsWindow : Window
     }
 
     internal event Action<PetSettings>? SettingsSelected;
+
+    internal void BringToFront()
+    {
+        // Let the context menu finish closing before asking Windows to activate settings.
+        _ = Dispatcher.InvokeAsync(() =>
+        {
+            if (!IsVisible)
+            {
+                return;
+            }
+
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+
+            if (!Activate())
+            {
+                Topmost = true;
+                try
+                {
+                    Activate();
+                }
+                finally
+                {
+                    Topmost = false;
+                }
+            }
+        }, DispatcherPriority.Background);
+    }
 
     private void ApplySelections(object sender, RoutedEventArgs e)
     {
@@ -163,12 +201,7 @@ internal partial class SettingsWindow : Window
         {
             ReleaseCheck result = await ReleaseUpdater.CheckAsync(token);
             token.ThrowIfCancellationRequested();
-            _availableUpdate = result.Update;
-            UpdateStatus.Text = result.Message;
-            if (result.Update is not null && ReleaseUpdater.CanInstall)
-            {
-                InstallUpdateButton.Visibility = Visibility.Visible;
-            }
+            ShowProgramUpdate(result);
         }
         catch (Exception error) when (token.IsCancellationRequested &&
             error is OperationCanceledException or HttpRequestException)
@@ -185,9 +218,26 @@ internal partial class SettingsWindow : Window
         }
     }
 
-    private async void InstallUpdate(object sender, RoutedEventArgs e)
+    internal Task InstallStartupUpdateAsync(ReleaseCheck result)
     {
-        if (_availableUpdate is not { } update)
+        UpdateTab.IsSelected = true;
+        ShowProgramUpdate(result);
+        return InstallProgramUpdateAsync();
+    }
+
+    private void ShowProgramUpdate(ReleaseCheck result)
+    {
+        _availableUpdate = result.Update;
+        UpdateStatus.Text = result.Message;
+        InstallUpdateButton.Visibility = result.Update is not null && ReleaseUpdater.CanInstall
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void InstallUpdate(object sender, RoutedEventArgs e) => await InstallProgramUpdateAsync();
+
+    private async Task InstallProgramUpdateAsync()
+    {
+        if (_installing || _checkingProgram || _availableUpdate is not { } update)
         {
             return;
         }
@@ -195,6 +245,7 @@ internal partial class SettingsWindow : Window
         CancellationToken token = _updates.Token;
         _installing = true;
         RefreshUpdateButtons();
+        RefreshResourceControls();
         UpdateStatus.Text = "正在下載並驗證更新包…";
         try
         {
@@ -217,6 +268,7 @@ internal partial class SettingsWindow : Window
         {
             _installing = false;
             RefreshUpdateButtons();
+            RefreshResourceControls();
         }
     }
 
@@ -225,6 +277,7 @@ internal partial class SettingsWindow : Window
         CancellationToken token = _updates.Token;
         _installing = true;
         RefreshUpdateButtons();
+        RefreshResourceControls();
         AssetStatus.Text = "正在檢查資源…";
         try
         {
@@ -237,7 +290,6 @@ internal partial class SettingsWindow : Window
                 return;
             }
 
-            AssetStatus.Text = "正在下載並驗證資源…";
             var progress = new Progress<string>(message => AssetStatus.Text = message);
             await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _installedArtwork, progress, token), token);
             await LoadInstalledModelsAsync(token);
@@ -264,13 +316,8 @@ internal partial class SettingsWindow : Window
             _installing = false;
             RefreshUpdateButtons();
             RefreshResourceControls();
+            await RefreshStorageUsageAsync(token);
         }
-    }
-
-    private void SetModelChoices(AssetSnapshot? artwork)
-    {
-        ModelOptions.ItemsSource = artwork?.Packs.SelectMany(pack => pack.Models?.Models ?? []).ToArray() ?? [];
-        ModelOptions.SelectedIndex = ModelOptions.Items.Count > 0 ? 0 : -1;
     }
 
     private async Task LoadInstalledModelsAsync(CancellationToken token)
@@ -280,7 +327,8 @@ internal partial class SettingsWindow : Window
             AssetSnapshot? installed = await Task.Run(() => ManagedCharacterAssets.LoadInstalled(ReleaseUpdater.CurrentVersion), token);
             if (!token.IsCancellationRequested)
             {
-                SetModelChoices(installed);
+                _modelPacks = installed?.Packs ?? [];
+                RefreshResourceControls();
             }
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
@@ -288,41 +336,15 @@ internal partial class SettingsWindow : Window
         }
     }
 
-    private void ModelSelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshResourceControls();
-
-    private async void BuildModel(object sender, RoutedEventArgs e) => await ManageModelAsync(remove: false);
-    private async void DeleteModel(object sender, RoutedEventArgs e) => await ManageModelAsync(remove: true);
-
-    private async Task ManageModelAsync(bool remove)
+    private void OpenModelManager(object sender, RoutedEventArgs e)
     {
-        if (_installing || ModelOptions.SelectedItem is not SpineModelChoice model)
+        var manager = new WardrobeWindow(null, _modelPacks)
         {
-            return;
-        }
-        CancellationToken token = _updates.Token;
-        _installing = true;
-        RefreshUpdateButtons();
-        RefreshResourceControls();
-        ModelStatus.Text = remove ? "正在刪除影格…" : "正在建置動畫影格…";
-        try
-        {
-            await Task.Run(() => remove ? model.Library.DeleteAsync(model.Id, token) : model.Library.BuildAsync(model.Id, token), token);
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-        }
-        catch (Exception error) when (CharacterPack.IsAssetError(error))
-        {
-            ModelStatus.Text = error is InvalidDataException ? error.Message : "無法變更模型影格，請檢查資料夾寫入權限。";
-            return;
-        }
-        finally
-        {
-            _installing = false;
-            RefreshUpdateButtons();
-            RefreshResourceControls(refreshModelStatus: false);
-        }
-        RefreshResourceControls();
+            Owner = this,
+            Icon = Icon,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        manager.ShowDialog();
     }
 
     private async void DownloadVoice(object sender, RoutedEventArgs e) => await ManageVoiceAsync(sender, remove: false);
@@ -338,7 +360,7 @@ internal partial class SettingsWindow : Window
         _installing = true;
         RefreshUpdateButtons();
         RefreshResourceControls();
-        VoicePackStatus.Text = remove ? "正在刪除配音…" : "正在下載並驗證配音…";
+        VoicePackStatus.Text = remove ? "正在刪除配音…" : "正在檢查配音資源…";
         try
         {
             if (remove)
@@ -349,7 +371,8 @@ internal partial class SettingsWindow : Window
             }
             else
             {
-                Version version = await Task.Run(() => AssetReleaseUpdater.DownloadVoiceAsync(language, token), token);
+                var progress = new Progress<string>(message => VoicePackStatus.Text = message);
+                Version version = await Task.Run(() => AssetReleaseUpdater.DownloadVoiceAsync(language, progress, token), token);
                 VoicePackStatus.Text = $"配音 {version} 已可使用。";
             }
         }
@@ -365,24 +388,40 @@ internal partial class SettingsWindow : Window
             _installing = false;
             RefreshUpdateButtons();
             RefreshResourceControls();
+            await RefreshStorageUsageAsync(token);
         }
     }
 
-    private void RefreshResourceControls(bool refreshModelStatus = true)
+    private async Task RefreshStorageUsageAsync(CancellationToken token)
     {
-        if (ModelStatus is null || ModelOptions is null || JapaneseVoiceStatus is null)
+        int refresh = ++_storageRefresh;
+        try
         {
-            return;
+            ResourceStorageUsage usage = await Task.Run(() => ResourceStorageUsage.Read(token), token);
+            if (refresh == _storageRefresh && !token.IsCancellationRequested)
+            {
+                ModelStorage.Text = FormatStorageUsage(usage.Models);
+                JapaneseVoiceStorage.Text = FormatStorageUsage(usage.Japanese);
+                MandarinVoiceStorage.Text = FormatStorageUsage(usage.Mandarin);
+            }
         }
-        var model = ModelOptions.SelectedItem as SpineModelChoice;
-        bool built = model?.Library.IsBuilt(model.Id) == true;
-        ModelOptions.IsEnabled = !_installing && ModelOptions.Items.Count > 0;
-        BuildModelButton.IsEnabled = !_installing && model is not null && !built;
-        DeleteModelButton.IsEnabled = !_installing && built;
-        if (refreshModelStatus && !_installing)
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
-            ModelStatus.Text = model is null ? "目前沒有可建置的模型。" : built ? "影格已建置" : "尚未建置";
         }
+    }
+
+    private static string FormatStorageUsage(long? bytes) => bytes switch
+    {
+        null => "無法計算佔用空間",
+        >= 1_000_000_000 => $"佔用空間 {bytes.Value / 1_000_000_000d:0.##} GB",
+        0 => "佔用空間 0 MB",
+        < 10_000 => "佔用空間 < 0.01 MB",
+        _ => $"佔用空間 {bytes.Value / 1_000_000d:0.##} MB"
+    };
+
+    private void RefreshResourceControls()
+    {
+        OpenModelManagerButton.IsEnabled = !_installing && _modelPacks.Any(pack => pack.Models is not null);
         RefreshVoiceStatus(PetSettings.Japanese, JapaneseVoiceStatus, DownloadJapaneseButton, DeleteJapaneseButton);
         RefreshVoiceStatus(PetSettings.Mandarin, MandarinVoiceStatus, DownloadMandarinButton, DeleteMandarinButton);
     }

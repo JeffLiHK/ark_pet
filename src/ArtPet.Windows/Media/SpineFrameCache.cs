@@ -242,8 +242,8 @@ internal static class SpineFrameCache
         string atlas = await File.ReadAllTextAsync(BoundedSourceFile(directory, "model.atlas"), token);
         string texture = TextureName(atlas);
         string png = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, texture), token));
-        string binary = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, "model.skel"), token));
-        JsonElement result = await EvaluateAsync(webView, $"window.renderer.load({Json(new { id, atlas, texture, png, binary })})", token);
+        string skeletonData = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, "model.skel"), token));
+        JsonElement result = await EvaluateAsync(webView, $"window.renderer.load({Json(new { id, atlas, texture, png, skeletonData })})", token);
         var counts = result.Deserialize<Dictionary<string, int>>(ManagedCharacterAssets.JsonOptions);
         if (counts is null || counts.Count != Animations.Count ||
             Animations.Keys.Any(clip => !counts.TryGetValue(clip, out int count) || count is < 1 or > MaximumFramesPerModel) ||

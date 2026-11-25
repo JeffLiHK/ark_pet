@@ -12,13 +12,13 @@ param(
     [string] $CharacterDirectory = (Join-Path $PSScriptRoot '../local-data/release-characters'),
     [string] $ImageDirectory = (Join-Path $PSScriptRoot '../local-data/release-images'),
     [string] $VoiceDirectory = (Join-Path $PSScriptRoot '../local-data/voices'),
-    [string] $AppIcon = (Join-Path $PSScriptRoot '../src/ArtPet.Windows/Media/Sprout.ico'),
+    [string] $AppIcon = (Join-Path $PSScriptRoot '../src/ArtPet.Windows/Media/ArtPet.ico'),
     [string] $OutputDirectory = (Join-Path $PSScriptRoot "../artifacts/assets-v$AssetVersion")
 )
 
 $ErrorActionPreference = 'Stop'
-if ([version]$MinAppVersion -lt [version]'1.3.2') {
-    throw 'Separate model and voice packages require ArtPet 1.3.2 or newer.'
+if ([version]$MinAppVersion -lt [version]'1.3.3') {
+    throw 'Separate model and voice packages require ArtPet 1.3.3 or newer.'
 }
 $output = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 if (Test-Path -LiteralPath $output) {
@@ -133,17 +133,11 @@ try {
             if ($id -cnotmatch '\A[a-z0-9][a-z0-9-]{0,39}\z') {
                 throw "Expected a character manifest in an immediate character ID folder: $entry"
             }
+            if ($id -eq 'sprout') {
+                continue
+            }
             $sources[$id] = Join-Path $CharacterDirectory $id
         }
-    }
-
-    if (-not $sources.Contains('sprout')) {
-        $sproutDirectory = Join-Path $staging 'sprout'
-        & dotnet run --configuration Release --file (Join-Path $PSScriptRoot 'ExportSproutArtwork.cs') -- $sproutDirectory
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Unable to export the bundled Sprout artwork.'
-        }
-        $sources['sprout'] = $sproutDirectory
     }
 
     $legacyPath = $null
@@ -180,8 +174,7 @@ try {
             }
             $characters.Add(@{ id = 'hoolheyak'; schemaVersion = 2 })
         }
-        foreach ($source in $sources.GetEnumerator() | Sort-Object @{ Expression = { $_.Key -ne 'hoolheyak' } },
-            @{ Expression = { $_.Key -eq 'sprout' } }, Key) {
+        foreach ($source in $sources.GetEnumerator() | Sort-Object @{ Expression = { $_.Key -ne 'hoolheyak' } }, Key) {
             $id = $source.Key
             $folder = $source.Value
             $definitionPath = Join-Path $folder 'character.json'
@@ -196,8 +189,8 @@ try {
             }
         }
 
-        if ($characters.Count -gt 64) {
-            throw 'The artwork package exceeds the 64-character limit.'
+        if ($characters.Count -gt 1024) {
+            throw 'The artwork package exceeds the 1024-character limit.'
         }
         $voiceRoot = (Resolve-Path -LiteralPath $VoiceDirectory).ProviderPath
         foreach ($character in $characters) {
@@ -227,7 +220,7 @@ try {
         $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
         try {
             $expanded = ($archive.Entries | Measure-Object -Property Length -Sum).Sum
-            if ($archive.Entries.Count -gt 20000 -or $expanded -gt 1GB -or (Get-Item -LiteralPath $zipPath).Length -gt 512MB) {
+            if ($archive.Entries.Count -gt 100000 -or $expanded -gt 4GB -or (Get-Item -LiteralPath $zipPath).Length -ge 2GB) {
                 throw "The archive exceeds the updater file count or size limit: $zipPath"
             }
         } finally {

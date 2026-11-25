@@ -2,11 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -18,26 +20,42 @@ namespace ArtPet.Windows.Wardrobe;
 
 internal partial class WardrobeWindow : Window
 {
-    private readonly PetSession _session;
+    private readonly PetSession? _session;
     private readonly IReadOnlyList<CharacterPack> _installedPacks;
     private readonly ObservableCollection<CharacterChoice> _characters = [];
     private readonly CancellationTokenSource _loading = new();
     private OutfitChoice[] _outfits = [];
     private Button? _lastCharacterButton;
+    private OutfitChoice? _modelSelection;
+    private bool _managingModel;
+    private bool _charactersLoaded;
 
-    internal WardrobeWindow(PetSession session, IReadOnlyList<CharacterPack> installedPacks)
+    internal WardrobeWindow(PetSession? session, IReadOnlyList<CharacterPack> installedPacks)
     {
-        InitializeComponent();
         _session = session;
         _installedPacks = installedPacks;
+        InitializeComponent();
+        ProfessionFilter.ItemsSource = WardrobeProfessions.Options;
+        ProfessionFilter.SelectedIndex = 0;
         Characters.ItemsSource = _characters;
-        _session.Changed += RefreshChoices;
+        CollectionViewSource.GetDefaultView(_characters).Filter = item =>
+            item is CharacterChoice character &&
+            (ProfessionFilter.SelectedValue is not string { Length: > 0 } profession || character.Profession == profession) &&
+            character.DisplayName.Contains(CharacterSearch.Text.Trim(), StringComparison.CurrentCultureIgnoreCase);
+        if (_session is not null)
+        {
+            _session.Changed += RefreshChoices;
+        }
+        else
+        {
+            Title = "Art Pet 模型影格";
+        }
         Loaded += LoadCharacters;
     }
 
     internal void ShowNear(PetWindow pet)
     {
-        IntPtr petHandle = new WindowInteropHelper(pet).Handle;
+        IntPtr petHandle = new WindowInteropHelper(pet).EnsureHandle();
         Screen screen = Screen.FromHandle(petHandle);
         var work = NativeMethods.GetWorkingArea(screen.Bounds.Location) ?? screen.WorkingArea;
         double dpiScale = NativeMethods.GetDpiForWindow(petHandle) / 96d;
@@ -85,7 +103,10 @@ internal partial class WardrobeWindow : Window
     {
         _loading.Cancel();
         _loading.Dispose();
-        _session.Changed -= RefreshChoices;
+        if (_session is not null)
+        {
+            _session.Changed -= RefreshChoices;
+        }
         base.OnClosed(e);
     }
 
@@ -93,8 +114,8 @@ internal partial class WardrobeWindow : Window
     {
         Loaded -= LoadCharacters;
         CancellationToken token = _loading.Token;
-        CharacterPack? activePack = _session.Pack;
-        if (activePack is not null && _session.Outfit is not null)
+        CharacterPack? activePack = _session?.Pack;
+        if (activePack is not null && _session?.Outfit is not null)
         {
             AddCharacter(new CharacterChoice(activePack));
         }
@@ -108,7 +129,8 @@ internal partial class WardrobeWindow : Window
                 activeCharacter.SetImages(portrait);
             }
 
-            foreach (var group in _installedPacks.GroupBy(pack => pack.Id, StringComparer.OrdinalIgnoreCase))
+            foreach (var group in _installedPacks.Where(pack => _session is not null || pack.Models is not null)
+                         .GroupBy(pack => pack.Id, StringComparer.OrdinalIgnoreCase))
             {
                 if (StringComparer.OrdinalIgnoreCase.Equals(group.Key, activePack?.Id))
                 {
@@ -128,8 +150,25 @@ internal partial class WardrobeWindow : Window
             return;
         }
 
-        CharacterListStatus.Text = "找不到可載入的角色素材";
-        CharacterListStatus.Visibility = _characters.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        _charactersLoaded = true;
+        UpdateCharacterStatus();
+    }
+
+    private void FilterCharacters(object sender, RoutedEventArgs e)
+    {
+        if (Characters?.ItemsSource is { } items)
+        {
+            CollectionViewSource.GetDefaultView(items).Refresh();
+            UpdateCharacterStatus();
+            CardsScroll.ScrollToTop();
+        }
+    }
+
+    private void UpdateCharacterStatus()
+    {
+        CharacterListStatus.Text = !_charactersLoaded ? "讀取角色素材…" :
+            _characters.Count == 0 ? "找不到可載入的角色素材" : "沒有符合篩選條件的角色";
+        CharacterListStatus.Visibility = Characters.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static CharacterChoice? FindCharacter(IEnumerable<CharacterPack> candidates, CancellationToken token)
@@ -151,6 +190,7 @@ internal partial class WardrobeWindow : Window
     {
         character.Refresh(_session);
         _characters.Add(character);
+        UpdateCharacterStatus();
     }
 
     private async void ShowOutfits(object sender, RoutedEventArgs e)
@@ -169,6 +209,11 @@ internal partial class WardrobeWindow : Window
         CharacterPage.Visibility = Visibility.Collapsed;
         Outfits.Visibility = Visibility.Visible;
         BackButton.Visibility = Visibility.Visible;
+        if (_session is null)
+        {
+            ModelActions.Visibility = Visibility.Visible;
+            RefreshModelActions();
+        }
         CardsScroll.ScrollToTop();
         BackButton.Focus();
 
@@ -180,16 +225,21 @@ internal partial class WardrobeWindow : Window
         CancellationToken token = _loading.Token;
         try
         {
-            foreach (OutfitChoice choice in character.Outfits)
-            {
-                var (preview, portrait) = await Task.Run(
-                    () => (LoadChibi(choice.Pack, choice.Outfit), choice.Pack.LoadPortrait(choice.Outfit)), token);
-                token.ThrowIfCancellationRequested();
-                choice.SetImages(portrait, preview);
-            }
+            await LoadOutfitImagesAsync(character.Outfits, token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
+        }
+    }
+
+    private static async Task LoadOutfitImagesAsync(IEnumerable<OutfitChoice> choices, CancellationToken token)
+    {
+        foreach (OutfitChoice choice in choices)
+        {
+            var (preview, portrait) = await Task.Run(
+                () => (LoadChibi(choice.Pack, choice.Outfit), choice.Pack.LoadPortrait(choice.Outfit)), token);
+            token.ThrowIfCancellationRequested();
+            choice.SetImages(portrait, preview);
         }
     }
 
@@ -201,6 +251,8 @@ internal partial class WardrobeWindow : Window
         CharacterPage.Visibility = Visibility.Visible;
         Outfits.ItemsSource = null;
         _outfits = [];
+        _modelSelection = null;
+        ModelActions.Visibility = Visibility.Collapsed;
         _lastCharacterButton?.Focus();
         _lastCharacterButton?.BringIntoView();
     }
@@ -231,7 +283,7 @@ internal partial class WardrobeWindow : Window
 
         foreach (OutfitChoice choice in _outfits)
         {
-            choice.Refresh(_session);
+            choice.Refresh(_session, _modelSelection == choice);
         }
     }
 
@@ -239,6 +291,13 @@ internal partial class WardrobeWindow : Window
     {
         if (sender is Button { DataContext: OutfitChoice choice })
         {
+            if (_session is null)
+            {
+                _modelSelection = choice;
+                RefreshChoices(this, EventArgs.Empty);
+                RefreshModelActions();
+                return;
+            }
             CancellationToken token = _loading.Token;
             await _session.SelectAsync(choice.Pack, choice.Outfit);
             try
@@ -253,6 +312,75 @@ internal partial class WardrobeWindow : Window
             {
             }
         }
+    }
+
+    private async void BuildModel(object sender, RoutedEventArgs e) => await ManageModelAsync(remove: false);
+
+    private async void DeleteModel(object sender, RoutedEventArgs e) => await ManageModelAsync(remove: true);
+
+    private async Task ManageModelAsync(bool remove)
+    {
+        if (_managingModel || _modelSelection is not { Pack.Models: { } library, Outfit: var outfit })
+        {
+            return;
+        }
+
+        CancellationToken token = _loading.Token;
+        _managingModel = true;
+        ModelStatus.Text = remove ? "正在刪除影格…" : "正在建置動畫影格…";
+        RefreshModelActions();
+        string? errorMessage = null;
+        try
+        {
+            await Task.Run(() => library.ManageOutfitAsync(outfit, remove, token), token);
+            await LoadOutfitImagesAsync(_outfits.Where(choice => library.ShareModel(outfit, choice.Outfit)), token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception error) when (CharacterPack.IsAssetError(error))
+        {
+            errorMessage = error is InvalidDataException ? error.Message :
+                "無法變更模型影格，請檢查模型素材及資料夾寫入權限。";
+        }
+        finally
+        {
+            _managingModel = false;
+        }
+
+        if (!token.IsCancellationRequested)
+        {
+            RefreshChoices(this, EventArgs.Empty);
+            RefreshModelActions();
+            if (errorMessage is not null)
+            {
+                ModelStatus.Text = errorMessage;
+            }
+        }
+    }
+
+    private void RefreshModelActions()
+    {
+        OutfitChoice? selected = _modelSelection;
+        bool built = selected?.Pack.IsOutfitReady(selected.Outfit) == true;
+        BackButton.IsEnabled = !_managingModel;
+        Outfits.IsEnabled = !_managingModel;
+        BuildModelButton.IsEnabled = !_managingModel && selected is not null && !built;
+        DeleteModelButton.IsEnabled = !_managingModel && built;
+        if (_managingModel)
+        {
+            return;
+        }
+
+        if (selected is not { Pack.Models: { } library })
+        {
+            ModelStatus.Text = "選擇要管理的造型。";
+            return;
+        }
+
+        string names = string.Join("／", _outfits.Where(choice => library.ShareModel(selected.Outfit, choice.Outfit))
+            .Select(choice => choice.DisplayName));
+        ModelStatus.Text = $"{names} · {(built ? "影格已建置" : "尚未建置")}";
     }
 
     private void CloseOnEscape(object sender, KeyEventArgs e)
@@ -294,11 +422,12 @@ internal partial class WardrobeWindow : Window
     private sealed class CharacterChoice(CharacterPack pack)
         : CardChoice(pack, pack.DisplayName)
     {
+        internal string? Profession { get; } = WardrobeProfessions.Find(pack.Id);
         internal OutfitChoice[]? Outfits { get; set; }
 
-        internal void Refresh(PetSession session)
+        internal void Refresh(PetSession? session)
         {
-            IsCurrent = session.Pack == Pack;
+            IsCurrent = session?.Pack == Pack;
             Status = IsCurrent ? "使用中" : string.Empty;
             NotifyChanged();
         }
@@ -307,11 +436,18 @@ internal partial class WardrobeWindow : Window
     private sealed class OutfitChoice(CharacterPack pack, OutfitDefinition outfit) : CardChoice(pack, outfit.DisplayName)
     {
         internal OutfitDefinition Outfit { get; } = outfit;
-        internal void Refresh(PetSession session)
+        internal void Refresh(PetSession? session, bool selected)
         {
+            bool ready = Pack.IsOutfitReady(Outfit);
+            if (session is null)
+            {
+                IsCurrent = selected;
+                Status = ready ? "影格已建置" : "尚未建置";
+                NotifyChanged();
+                return;
+            }
             IsCurrent = session.Pack == Pack && session.Outfit?.Definition == Outfit;
             HasError = session.HasLoadError(Pack, Outfit);
-            bool ready = Pack.IsOutfitReady(Outfit);
             Status = session.PendingSelection == (Pack, Outfit) ? ready ? "套用中…" : "正在建置模型…" :
                 HasError ? "素材無法讀取" : IsCurrent ? "使用中" : ready ? string.Empty : "尚未建置";
             NotifyChanged();

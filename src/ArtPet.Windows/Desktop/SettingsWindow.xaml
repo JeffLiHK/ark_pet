@@ -236,22 +236,22 @@
                     </Border>
                     <TextBlock x:Name="IdleLoopsError" Text="請輸入 1 到 100 的整數。"
                                Foreground="#FFB4A6" FontSize="12" Margin="0,6,0,0" Visibility="Collapsed" />
-                    <CheckBox x:Name="InteractionModeCheckBox" Content="啟用互動模式"
+                    <CheckBox x:Name="InteractionModeCheckBox" Content="互動模式"
                               Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" />
-                    <TextBlock Text="關閉後滑鼠會穿透小人。可從通知區的設定重新開啟。" Style="{StaticResource Hint}" />
+                    <TextBlock Text="開啟後可以與小人交互。關閉後滑鼠會穿透小人。" Style="{StaticResource Hint}" />
                     <DockPanel Margin="0,14,0,0">
                         <ComboBox x:Name="WalkingSpeedOptions" DockPanel.Dock="Right" VerticalAlignment="Center"
                                   AutomationProperties.LabeledBy="{Binding ElementName=WalkingSpeedLabel}" ItemStringFormat="{}{0}%" />
                         <Label x:Name="WalkingSpeedLabel" DockPanel.Dock="Right" Margin="0,0,12,0"
-                               Content="自由模式步速" Target="{Binding ElementName=WalkingSpeedOptions}" />
+                               Content="散步速度" Target="{Binding ElementName=WalkingSpeedOptions}" />
                         <StackPanel VerticalAlignment="Center">
                             <CheckBox x:Name="FreeModeCheckBox" Content="自由模式" Foreground="{StaticResource TextBrush}" />
-                            <TextBlock Text="在目前螢幕散步，偶爾發呆或睡覺。" Style="{StaticResource Hint}" />
+                            <TextBlock Text="在目前螢幕自由散步，偶爾發呆或睡覺。" Style="{StaticResource Hint}" />
                         </StackPanel>
                     </DockPanel>
                     <CheckBox x:Name="PhysicsModeCheckBox" Content="物理模式"
                               Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" />
-                    <TextBlock Text="放開小人後，會落到視窗、工作列或螢幕底部。" Style="{StaticResource Hint}" />
+                    <TextBlock Text="放開小人後，會下落到視窗、工作列或螢幕底部。" Style="{StaticResource Hint}" />
                     <CheckBox x:Name="StartupCheckBox" Content="登入 Windows 時啟動 Art Pet"
                               Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" Click="ChangeStartup" />
                     <TextBlock x:Name="StartupStatus" Style="{StaticResource Hint}" Visibility="Collapsed" />
@@ -313,7 +313,7 @@
                     <TextBlock Text="可在「資源管理」下載或刪除配音。" Style="{StaticResource Hint}" Margin="0,14,0,0" />
                 </StackPanel>
             </TabItem>
-            <TabItem Header="更新">
+            <TabItem x:Name="UpdateTab" Header="更新">
                 <StackPanel>
                     <TextBlock Text="更新" Style="{StaticResource PageTitle}" />
                     <Border Style="{StaticResource SettingRow}">
@@ -337,23 +337,16 @@
                         <TextBlock Text="模型資源" Style="{StaticResource PageTitle}" />
                         <Border Style="{StaticResource SettingRow}">
                             <StackPanel>
-                                <TextBlock x:Name="AssetVersionText" Style="{StaticResource Hint}" Margin="0,4,0,8" />
-                                <Button x:Name="CheckAssetButton" Content="更新全部模型" Padding="12,6"
-                                        HorizontalAlignment="Left" Click="CheckForAssets" />
+                                <TextBlock x:Name="AssetVersionText" Style="{StaticResource Hint}" Margin="0,4,0,0" />
+                                <TextBlock x:Name="ModelStorage" Style="{StaticResource Hint}" Margin="0,4,0,8"
+                                           Text="正在計算佔用空間…" />
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="CheckAssetButton" Content="更新全部模型" Padding="12,6"
+                                            Click="CheckForAssets" />
+                                    <Button x:Name="OpenModelManagerButton" Content="管理模型影格…" Padding="12,6"
+                                            Margin="8,0,0,0" Click="OpenModelManager" />
+                                </StackPanel>
                                 <TextBlock x:Name="AssetStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
-                                           AutomationProperties.LiveSetting="Polite" />
-                            </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource SettingRow}">
-                            <StackPanel>
-                                <Label Content="選擇模型" Target="{Binding ElementName=ModelOptions}" />
-                                <ComboBox x:Name="ModelOptions" DisplayMemberPath="DisplayName"
-                                          SelectionChanged="ModelSelectionChanged" />
-                                <WrapPanel Margin="0,8,0,0">
-                                    <Button x:Name="BuildModelButton" Content="建置影格" Padding="12,6" Click="BuildModel" />
-                                    <Button x:Name="DeleteModelButton" Content="刪除影格" Padding="12,6" Margin="8,0,0,0" Click="DeleteModel" />
-                                </WrapPanel>
-                                <TextBlock x:Name="ModelStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
                                            AutomationProperties.LiveSetting="Polite" />
                             </StackPanel>
                         </Border>
@@ -361,7 +354,9 @@
                         <Border Style="{StaticResource SettingRow}">
                             <StackPanel>
                                 <TextBlock Text="日語配音" FontWeight="SemiBold" />
-                                <TextBlock x:Name="JapaneseVoiceStatus" Style="{StaticResource Hint}" Margin="0,4,0,8" />
+                                <TextBlock x:Name="JapaneseVoiceStatus" Style="{StaticResource Hint}" Margin="0,4,0,0" />
+                                <TextBlock x:Name="JapaneseVoiceStorage" Style="{StaticResource Hint}" Margin="0,4,0,8"
+                                           Text="正在計算佔用空間…" />
                                 <WrapPanel>
                                     <Button x:Name="DownloadJapaneseButton" Content="下載／更新" Tag="ja" Padding="12,6" Click="DownloadVoice" />
                                     <Button x:Name="DeleteJapaneseButton" Content="刪除配音" Tag="ja" Padding="12,6" Margin="8,0,0,0" Click="DeleteVoice" />
@@ -371,7 +366,9 @@
                         <Border Style="{StaticResource SettingRow}">
                             <StackPanel>
                                 <TextBlock Text="普通話配音" FontWeight="SemiBold" />
-                                <TextBlock x:Name="MandarinVoiceStatus" Style="{StaticResource Hint}" Margin="0,4,0,8" />
+                                <TextBlock x:Name="MandarinVoiceStatus" Style="{StaticResource Hint}" Margin="0,4,0,0" />
+                                <TextBlock x:Name="MandarinVoiceStorage" Style="{StaticResource Hint}" Margin="0,4,0,8"
+                                           Text="正在計算佔用空間…" />
                                 <WrapPanel>
                                     <Button x:Name="DownloadMandarinButton" Content="下載／更新" Tag="zh-CN" Padding="12,6" Click="DownloadVoice" />
                                     <Button x:Name="DeleteMandarinButton" Content="刪除配音" Tag="zh-CN" Padding="12,6" Margin="8,0,0,0" Click="DeleteVoice" />

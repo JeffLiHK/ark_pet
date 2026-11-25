@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -13,7 +14,7 @@ using System.Threading.Tasks;
 namespace ArtPet.Windows.Desktop;
 
 internal sealed record ReleaseUpdate(Version Version, ReleasePackage Package);
-internal sealed record ReleaseCheck(ReleaseUpdate? Update, string Message);
+internal sealed record ReleaseCheck(ReleaseUpdate? Update, string Message, bool NewerVersionAvailable = false);
 
 internal static class ReleaseUpdater
 {
@@ -47,12 +48,12 @@ internal static class ReleaseUpdater
 
         if (GitHubReleaseSource.FindPackage(Repository, release, AssetName) is not { } package)
         {
-            return new(null, $"已發行 {version.ToString(3)}，但 GitHub 尚未提供可驗證的 Windows x64 更新包。");
+            return new(null, $"已發行 {version.ToString(3)}，但 GitHub 尚未提供可驗證的 Windows x64 更新包。", true);
         }
 
         string message = CanInstall ? $"發現新版本 {version.ToString(3)}。" :
             $"發現新版本 {version.ToString(3)}。請使用 Windows x64 發佈版安裝更新。";
-        return new(new(version, package), message);
+        return new(new(version, package), message, true);
     }
 
     private static Version? ReadTagVersion(string tag)
@@ -73,7 +74,7 @@ internal static class ReleaseUpdater
             throw new InvalidOperationException("A self-contained win-x64 build is required.");
         }
 
-        string target = AppContext.BaseDirectory;
+        string target = ProjectStorage.InstallDirectory;
         string staging = Path.Combine(target, $".artpet-update-{Guid.NewGuid():N}");
         bool installerStarted = false;
         try
@@ -145,21 +146,41 @@ internal static class ReleaseUpdater
 
             if (!relative.EndsWith('\\') &&
                 !topLevel.Equals("local-data", StringComparison.OrdinalIgnoreCase) &&
-                !topLevel.Equals("assets", StringComparison.OrdinalIgnoreCase))
+                !topLevel.Equals("assets", StringComparison.OrdinalIgnoreCase) &&
+                (!topLevel.Equals("resource", StringComparison.OrdinalIgnoreCase) ||
+                    relative.StartsWith(@"resource\licenses\", StringComparison.OrdinalIgnoreCase)))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
                 entry.ExtractToFile(destination);
             }
         }
 
-        if (!File.Exists(Path.Combine(payload, ExecutableName)) ||
-            !File.Exists(Path.Combine(payload, "coreclr.dll")) ||
-            !File.Exists(Path.Combine(payload, "ArtPet.Windows.runtimeconfig.json")) ||
-            !File.Exists(Path.Combine(payload, "ArtPet.Windows.dll")) ||
-            AssemblyName.GetAssemblyName(Path.Combine(payload, "ArtPet.Windows.dll")).Version != update.Version)
+        string executable = Path.Combine(payload, ExecutableName);
+        if (!File.Exists(executable) || ReadPackageVersion(payload, executable) != update.Version)
         {
             throw new InvalidDataException("更新包內容與 GitHub 發行版本不符。");
         }
+    }
+
+    private static Version? ReadPackageVersion(string payload, string executable)
+    {
+        string data = Path.Combine(payload, "data");
+        bool nested = Directory.Exists(data);
+        string runtime = nested ? data : payload;
+        string assembly = Path.Combine(runtime, "ArtPet.Windows.dll");
+        return File.Exists(Path.Combine(runtime, "coreclr.dll")) &&
+            File.Exists(Path.Combine(runtime, "ArtPet.Windows.runtimeconfig.json")) &&
+            File.Exists(assembly) && (!nested || UsesNestedAppHost(executable))
+            ? AssemblyName.GetAssemblyName(assembly).Version
+            : null;
+    }
+
+    private static bool UsesNestedAppHost(string executable)
+    {
+        // The Windows .NET apphost stores its null-terminated application path in the data section.
+        using var image = new PEReader(File.OpenRead(executable));
+        return image.PEHeaders.CoffHeader.Machine == Machine.Amd64 &&
+            image.GetSectionData(".data").GetContent().AsSpan().IndexOf("data\\ArtPet.Windows.dll\0"u8) >= 0;
     }
 
     private static void StartInstaller(string staging, string target)

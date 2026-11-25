@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-`ArtPet.slnx` contains the C#/.NET 10 WPF desktop app in `src/ArtPet.Windows/`. `Desktop/` owns the pet and settings windows, tray icon, and Win32 interop. `Media/` handles character packs, animation, voice, and the bundled Sprout fallback. `Wardrobe/` contains the outfit picker and previews. `docs/` covers architecture and acceptance, and `scripts/` contains asset migration, validation, and voice import tools.
+`ArtPet.slnx` contains the C#/.NET 10 WPF desktop app in `src/ArtPet.Windows/`. `Desktop/` owns the pet and settings windows, tray icon, and Win32 interop. `Media/` handles character packs, animation, and voice. `Wardrobe/` contains the outfit picker and previews. `docs/` covers architecture and acceptance, and `scripts/` contains asset migration, validation, and voice import tools.
 
 Keep character frames, Spine models, and local settings under `local-data/`. That directory and release output under `artifacts/` are Git-ignored.
 
@@ -18,14 +18,14 @@ For release packaging or published-build validation, use the self-contained `win
 
 ## Publish GitHub Releases
 
-Program and artwork releases have independent tags and update checks. Release only the channel that changed. For the first rollout, initialize the public `JeffLiHK/art_pet_assets` repository with a commit to tag. Publish the initial asset release, then publish the first program version that supports it. Set the initial asset release's minimum program version to that program version. Existing users keep their bundled or locally imported assets when upgrading. Fresh installations use the bundled Sprout until official artwork is installed from Settings.
+Program and artwork releases have independent tags and update checks. Release only the channel that changed. For the first rollout, initialize the public `JeffLiHK/art_pet_assets` repository with a commit to tag. Publish the initial asset release, then publish the first program version that supports it. Set the initial asset release's minimum program version to that program version. Existing users keep their bundled or locally imported assets when upgrading. Fresh installations download the latest compatible artwork and Japanese voice pack during startup.
 
 ### Program release
 
 1. Set `Version` in `src/ArtPet.Windows/ArtPet.Windows.csproj` to the three-part version that matches the requested tag. For example, `v1.3` maps to `1.3.0`. Review against the previous release, stage the intended files by path, commit, and push the commit and tag to `origin`. Confirm that the remote tag points to the intended commit.
-2. Build the tagged source on Windows with the SDK selected by `global.json`. Use the [program publish command](README.md#github-更新包) and a fresh output directory under `artifacts/`. Check the assembly version of `ArtPet.Windows.dll`. ZIP the publish directory contents as `ArtPet-win-x64.zip` with `ArtPet.Windows.exe` at the ZIP root. Check that the archive has no `assets/` or `local-data/` entries and record its SHA-256.
+2. Build the tagged source on Windows with the SDK selected by `global.json`. Use the [program publish command](README.md#github-更新包) and a fresh output directory under `artifacts/`. Check the assembly version of `data/ArtPet.Windows.dll`. ZIP the publish directory contents as `ArtPet-win-x64.zip` with `ArtPet.Windows.exe`, `data/`, and `resource/` at the ZIP root. Check that the archive has no bundled character assets or `local-data/` entries and record its SHA-256.
 3. Create a public, stable Release in `JeffLiHK/art_pet` from the existing tag. Attach the ZIP and mark the Release as latest. With an authenticated GitHub CLI, use `gh release create <tag> <zip> --repo JeffLiHK/art_pet --verify-tag --latest --title <title> --notes-file <file>`.
-4. Query the public [program latest release endpoint](https://api.github.com/repos/JeffLiHK/art_pet/releases/latest). Verify the tag, download and GitHub asset digest against the local ZIP. Check that the previous version detects the program update and that updating preserves its installed character assets and settings.
+4. Query the public [program latest release endpoint](https://api.github.com/repos/JeffLiHK/art_pet/releases/latest). Verify the tag, download and GitHub asset digest against the local ZIP. Check that the previous version detects the program update and that updating preserves its installed character assets and settings. For the first release with `data/` and `resource/`, include the manual upgrade steps from the README in the release notes for users of the old package format.
 
 ### Artwork release
 

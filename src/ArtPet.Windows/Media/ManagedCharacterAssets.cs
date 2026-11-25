@@ -35,7 +35,7 @@ internal static class ManagedCharacterAssets
     internal const string ManifestName = "assets-manifest.json";
     internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     // Keep the installation index readable across upgrades from the single-character release.
-    internal static string RootDirectory { get; } = Path.Combine(ProjectStorage.DataDirectory, "managed-assets", LegacyPackId);
+    internal static string RootDirectory { get; } = Path.Combine(ProjectStorage.ManagedAssetsDirectory, LegacyPackId);
     private static string StatePath => Path.Combine(RootDirectory, "active.json");
 
     internal static AssetSnapshot? LoadInstalled(Version appVersion)
@@ -67,10 +67,13 @@ internal static class ManagedCharacterAssets
                         VoiceAssets.Validate(directory, catalog, CancellationToken.None, subtitlesOnly: manifest.HasSplitResources);
                         voiceRoot = Path.Combine(directory, VoiceAssets.DirectoryName);
                     }
-                    var packs = catalog.Characters.Select(character => manifest.HasSplitResources
+                    var packs = catalog.Characters.Where(character => character.Id != ArtworkCatalog.RetiredCharacterId)
+                        .Select(character => manifest.HasSplitResources
                         ? character.OpenSource(directory, CancellationToken.None)
                         : character.LoadValidated(directory, CancellationToken.None)).ToArray();
-                    return new(installation, packs, icon, voiceRoot);
+                    return new(installation, packs,
+                        catalog.Characters.Any(character => character.Id == ArtworkCatalog.RetiredCharacterId) ? null : icon,
+                        voiceRoot);
                 }
 
                 if (CharacterPack.TryOpen(directory) is { Id: LegacyPackId } pack &&

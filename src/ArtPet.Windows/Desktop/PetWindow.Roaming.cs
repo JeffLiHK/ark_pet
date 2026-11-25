@@ -12,6 +12,7 @@ namespace ArtPet.Windows.Desktop;
 public partial class PetWindow
 {
     private const double WalkingSpeedDip = 32;
+    private const int SleepChanceDenominator = 12;
     private bool _roaming;
     private (TimeSpan RenderingTime, long Timestamp)? _lastRoamingFrame;
     private Walk? _walk;
@@ -49,16 +50,11 @@ public partial class PetWindow
     private void PauseRoaming(bool allowSleep = false)
     {
         _walk = null;
-        bool sleep = allowSleep && _player.CanSleep && Random.Shared.Next(4) == 0;
-        SetRestingAction(sleep && !Settings.PhysicsModeEnabled ? RoamingAction.Sleep : GetPhysicsAction());
-        int seconds = sleep ? Random.Shared.Next(8, 17) : Random.Shared.Next(2, 6);
+        bool sleep = allowSleep && !Settings.PhysicsModeEnabled && _player.CanSleep &&
+            Random.Shared.Next(SleepChanceDenominator) == 0;
+        _player.SetRoamingAction(sleep ? RoamingAction.Sleep : GetPhysicsAction());
+        int seconds = sleep ? Random.Shared.Next(3, 7) : Random.Shared.Next(2, 6);
         _restUntil = Stopwatch.GetTimestamp() + Stopwatch.Frequency * seconds;
-    }
-
-    private void SetRestingAction(RoamingAction action)
-    {
-        _player.SetRoamingAction(action);
-        PetArt.SetRestingAction(action);
     }
 
     private void UpdateRoaming(object? sender, EventArgs e)
@@ -85,7 +81,7 @@ public partial class PetWindow
             }
             else if (_walk is null)
             {
-                SetRestingAction(GetPhysicsAction());
+                _player.SetRoamingAction(GetPhysicsAction());
             }
         }
 

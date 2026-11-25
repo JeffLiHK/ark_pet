@@ -20,7 +20,7 @@ internal sealed class TrayIcon : IDisposable
     {
         if (appIcon is null)
         {
-            var iconUri = new Uri("/ArtPet.Windows;component/Media/Sprout.ico", UriKind.Relative);
+            var iconUri = new Uri("/ArtPet.Windows;component/Media/ArtPet.ico", UriKind.Relative);
             using var imageStream = System.Windows.Application.GetResourceStream(iconUri)!.Stream;
             _fallbackImage = new Icon(imageStream, SystemInformation.SmallIconSize);
         }
@@ -69,6 +69,9 @@ internal sealed class TrayIcon : IDisposable
         _menu.Opening += (_, _) =>
         {
             visibilityItem.Text = pet.IsVisible ? "隱藏小人" : "顯示小人";
+            visibilityItem.Enabled = pet.HasOutfit;
+            resetItem.Enabled = pet.HasOutfit;
+            addPetItem.Enabled = pet.HasOutfit;
             topmostItem.Checked = pet.Topmost;
             RefreshPetMenu(petsItem, getPets());
         };
@@ -134,6 +137,9 @@ internal sealed class TrayIcon : IDisposable
 
     internal void ShowSettingsSaveError() =>
         _icon.ShowBalloonTip(3500, "Art Pet", "目前無法保存設定。重開後會恢復上次保存的設定。", ToolTipIcon.Warning);
+
+    internal void ShowSetupStatus(string message) =>
+        _icon.ShowBalloonTip(5000, "Art Pet", message, ToolTipIcon.Info);
 
     public void Dispose()
     {

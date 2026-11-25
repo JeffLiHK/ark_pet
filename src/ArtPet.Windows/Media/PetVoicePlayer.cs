@@ -11,11 +11,13 @@ namespace ArtPet.Windows.Media;
 
 internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? managedVoiceRoot)
 {
+    private static readonly TimeSpan AudioDrainTime = TimeSpan.FromMilliseconds(400);
     private (string Character, string Voice, string Subtitle)? _selection;
     private MediaPlayer? _player;
     private long _playRequest;
+    private bool _loading;
     private double _volume = 1;
-    internal bool IsPlaying => _player is not null;
+    internal bool IsPlaying => _loading || _player is not null;
 
     internal void SetVolume(int percent)
     {
@@ -36,15 +38,27 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
 
     internal async Task PlayRandomAsync()
     {
-        Stop();
-        if (_selection is not { } selection)
+        if (IsPlaying || _selection is not { } selection)
         {
             return;
         }
 
         long request = _playRequest;
-        VoiceLine[] available = await Task.Run(() =>
-            ReadLines(selection.Character, managedVoiceRoot, selection.Voice, selection.Subtitle));
+        _loading = true;
+        VoiceLine[] available;
+        try
+        {
+            available = await Task.Run(() =>
+                ReadLines(selection.Character, managedVoiceRoot, selection.Voice, selection.Subtitle));
+        }
+        finally
+        {
+            if (_playRequest == request)
+            {
+                _loading = false;
+            }
+        }
+
         if (_playRequest != request || available.Length == 0)
         {
             return;
@@ -69,7 +83,12 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
             player.Play();
             showSubtitle(line.Subtitle);
         };
-        player.MediaEnded += (_, _) => Finish(player);
+        player.MediaEnded += async (_, _) =>
+        {
+            // Give the audio endpoint time to render its final buffered samples before closing.
+            await Task.Delay(AudioDrainTime);
+            Finish(player);
+        };
         player.MediaFailed += (_, _) => Finish(player);
 
         try
@@ -85,6 +104,7 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
     internal void Stop()
     {
         _playRequest++;
+        _loading = false;
         if (_player is not { } player)
         {
             return;
@@ -105,7 +125,7 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
 
     private static VoiceLine[] ReadLines(string characterId, string? voiceRoot, string voiceLanguage, string subtitleLanguage)
     {
-        string localRoot = Path.Combine(ProjectStorage.DataDirectory, VoiceAssets.DirectoryName);
+        string localRoot = ProjectStorage.ImportedVoicesDirectory;
         string? managed = voiceRoot is null ? null : Path.Combine(voiceRoot, characterId);
         string local = Path.Combine(localRoot, characterId);
         string? legacy = characterId == ManagedCharacterAssets.LegacyPackId ? Path.Combine(localRoot, "霍爾海雅") : null;

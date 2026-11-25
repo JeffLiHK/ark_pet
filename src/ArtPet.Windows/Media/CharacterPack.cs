@@ -46,13 +46,16 @@ internal sealed class CharacterPack
             yield return pack;
         }
 
-        string bundledAssets = Path.Combine(AppContext.BaseDirectory, "assets");
-        string localAssets = Path.Combine(ProjectStorage.DataDirectory, "assets");
+        string bundledAssets = ProjectStorage.BundledAssetsDirectory;
+        string legacyBundledAssets = ProjectStorage.LegacyBundledAssetsDirectory;
+        string localAssets = ProjectStorage.ImportedAssetsDirectory;
         string legacyLocalCharacter = Path.Combine(localAssets, LegacyCharacterFolder);
         string[] directories =
         [
             Path.Combine(bundledAssets, CharacterFolder),
             Path.Combine(bundledAssets, LegacyCharacterFolder),
+            Path.Combine(legacyBundledAssets, CharacterFolder),
+            Path.Combine(legacyBundledAssets, LegacyCharacterFolder),
             Path.Combine(localAssets, CharacterFolder),
             Path.Combine(legacyLocalCharacter, "desktop-60"),
             Path.Combine(legacyLocalCharacter, "desktop")
@@ -60,12 +63,15 @@ internal sealed class CharacterPack
 
         var candidates = directories
             .Concat(FindCharacterDirectories(bundledAssets))
+            .Concat(FindCharacterDirectories(legacyBundledAssets))
             .Concat(FindCharacterDirectories(localAssets))
             .Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (string directory in candidates)
         {
-            if (TryOpen(directory) is { } pack && snapshot?.Packs.Any(candidate =>
-                candidate.Models is not null && StringComparer.OrdinalIgnoreCase.Equals(candidate.Id, pack.Id)) != true)
+            if (TryOpen(directory) is { } pack &&
+                !StringComparer.OrdinalIgnoreCase.Equals(pack.Id, ArtworkCatalog.RetiredCharacterId) &&
+                snapshot?.Packs.Any(candidate =>
+                    candidate.Models is not null && StringComparer.OrdinalIgnoreCase.Equals(candidate.Id, pack.Id)) != true)
             {
                 yield return pack;
             }

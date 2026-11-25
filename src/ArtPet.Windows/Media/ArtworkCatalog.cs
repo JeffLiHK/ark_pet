@@ -15,18 +15,17 @@ internal sealed record ArtworkCatalog(ArtworkCharacter[] Characters)
     internal const string PackId = "artpet";
     internal const string CatalogName = "catalog.json";
     internal const string IconName = "app.ico";
-    internal const string SproutId = "sprout";
+    internal const string RetiredCharacterId = "sprout";
 
     internal static ArtworkCatalog Read(string directory)
     {
         using FileStream file = File.OpenRead(Path.Combine(directory, CatalogName));
-        if (file.Length > 64 * 1024 ||
+        if (file.Length > 128 * 1024 ||
             JsonSerializer.Deserialize<ArtworkCatalog>(file, ManagedCharacterAssets.JsonOptions) is not
-                { Characters: { Length: > 0 and <= 64 } characters } catalog ||
+                { Characters: { Length: > 0 and <= 1024 } characters } catalog ||
             characters.Any(character => character is null || !SpineFrameCache.IsIdentifier(character.Id) ||
                 character.SchemaVersion is not (CharacterPack.SupportedSchemaVersion or SpineFrameCache.SchemaVersion)) ||
             characters.Select(character => character.Id).Distinct(StringComparer.Ordinal).Count() != characters.Length ||
-            !characters.Any(character => character.Id == SproutId) ||
             !characters.Any(character => character.Id == ManagedCharacterAssets.LegacyPackId))
         {
             throw new InvalidDataException("完整美術資源包的角色清單無效。");

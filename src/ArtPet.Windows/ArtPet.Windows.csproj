@@ -6,8 +6,8 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Media/Sprout.ico</ApplicationIcon>
-    <Version>1.3.2</Version>
+    <ApplicationIcon>Media/ArtPet.ico</ApplicationIcon>
+    <Version>1.6.0</Version>
     <HoolheyakCharacterFolder>霍爾海雅</HoolheyakCharacterFolder>
     <ProjectAssetsDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets</ProjectAssetsDirectory>
     <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)\character.json')">$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)</HoolheyakPackDirectory>
@@ -17,13 +17,15 @@
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <Resource Include="Media/Sprout.ico" />
-    <InternalsVisibleTo Include="ArtPet.ExportSproutArtwork" />
+    <Resource Include="Media/ArtPet.ico" />
+    <Resource Include="Wardrobe/ProfessionIcons/*.png" />
+    <EmbeddedResource Include="Wardrobe/CharacterProfessions.json" LogicalName="ArtPet.CharacterProfessions.json" />
     <EmbeddedResource Include="Desktop/ApplyUpdate.ps1" LogicalName="ArtPet.ApplyUpdate.ps1" />
     <EmbeddedResource Include="Media/SpineFrameRenderer.js" LogicalName="ArtPet.SpineFrameRenderer.js" />
     <EmbeddedResource Include="$(BaseIntermediateOutputPath)spine/spine-webgl.js" LogicalName="ArtPet.SpineWebGL.js" />
     <None Include="$(BaseIntermediateOutputPath)spine/Spine-Runtime-LICENSE.txt"
-          Link="Spine-Runtime-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+          Link="resource/licenses/Spine-Runtime-LICENSE.txt" CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" />
   </ItemGroup>
   <Target Name="PrepareSpineRuntime" BeforeTargets="PrepareForBuild">
@@ -44,9 +46,29 @@
   </Target>
   <ItemGroup Condition="'$(BundleHoolheyak)' == 'true'">
     <Content Include="$(HoolheyakPackDirectory)\character.json;$(HoolheyakPackDirectory)\**\*.png;$(HoolheyakPackDirectory)\**\*.jpg;$(HoolheyakPackDirectory)\**\*.jpeg"
-             Link="assets\$(HoolheyakCharacterFolder)\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+             Link="resource\assets\$(HoolheyakCharacterFolder)\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="CheckHoolheyakPack" BeforeTargets="PrepareForPublish" Condition="'$(BundleHoolheyak)' == 'true'">
     <Exec Command="dotnet run --file &quot;$(MSBuildProjectDirectory)\..\..\scripts\ValidateHoolheyakPack.cs&quot; -- &quot;$(HoolheyakPackDirectory)&quot;" />
+  </Target>
+  <Target Name="ArrangeWindowsPublishFiles" AfterTargets="ComputeFilesToPublish"
+          DependsOnTargets="_GetAppHostPaths;_GetAppHostCreationConfiguration"
+          Condition="'$(RuntimeIdentifier)' == 'win-x64' And '$(SelfContained)' == 'true' And '$(PublishSingleFile)' != 'true' And '$(UseAppHost)' == 'true'">
+    <PropertyGroup>
+      <PublishLauncher>$(IntermediateOutputPath)publish-launcher.exe</PublishLauncher>
+    </PropertyGroup>
+    <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)" AppHostDestinationPath="$(PublishLauncher)"
+                   AppBinaryName="data\$(AssemblyName)$(TargetExt)" IntermediateAssembly="@(IntermediateAssembly->'%(FullPath)')"
+                   WindowsGraphicalUserInterface="$(_UseWindowsGraphicalUserInterface)" DisableCetCompat="$(_DisableCetCompat)"
+                   Retries="$(CopyRetryCount)" RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)" />
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(ResolvedFileToPublish.RelativePath)' == '$(AssemblyName).exe'" />
+      <ResolvedFileToPublish Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('%(ResolvedFileToPublish.RelativePath)', '^resource[\\/]'))">
+        <RelativePath>data\%(ResolvedFileToPublish.RelativePath)</RelativePath>
+      </ResolvedFileToPublish>
+      <ResolvedFileToPublish Include="$(PublishLauncher)" RelativePath="$(AssemblyName).exe" CopyToPublishDirectory="PreserveNewest" IsKeyOutput="true" />
+    </ItemGroup>
   </Target>
 </Project>
