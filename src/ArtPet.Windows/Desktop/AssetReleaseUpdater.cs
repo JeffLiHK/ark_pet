@@ -15,7 +15,7 @@ internal sealed record AssetReleaseCheck(AssetReleaseUpdate? Update, string Mess
 
 internal static class AssetReleaseUpdater
 {
-    private const string Repository = "JeffLiHK/art_pet_assets";
+    private const string Repository = "JeffLiHK/ark_pet_assets";
     private const string ArchiveName = "ArtPet-assets.zip";
     private const string LegacyArchiveName = "ArtPet-hoolheyak-assets.zip";
     private const long MaximumArchiveSize = 2L * 1024 * 1024 * 1024 - 1;

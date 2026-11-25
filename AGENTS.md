@@ -56,7 +56,7 @@ dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --
 
 ## Publish GitHub Releases
 
-Program and artwork releases have independent tags and update checks. Release only the channel that changed. Run packaging commands from the repository root in PowerShell 7 and use a fresh output directory for each release. For the first rollout, initialize the public `JeffLiHK/art_pet_assets` repository with a commit to tag. Publish the initial asset release, then publish the first program version that supports it. Set the initial asset release's minimum program version to that program version. Existing users keep their bundled or locally imported assets when upgrading. Fresh installations download the latest compatible artwork and Japanese voice pack during startup.
+Program and artwork releases have independent tags and update checks. Release only the channel that changed. Run packaging commands from the repository root in PowerShell 7 and use a fresh output directory for each release. For the first rollout, initialize the public `JeffLiHK/ark_pet_assets` repository with a commit to tag. Publish the initial asset release, then publish the first program version that supports it. Set the initial asset release's minimum program version to that program version. Existing users keep their bundled or locally imported assets when upgrading. Fresh installations download the latest compatible artwork and Japanese voice pack during startup.
 
 ### Program release
 
@@ -87,8 +87,8 @@ Compress-Archive -Path "$programOutput/publish/*" -DestinationPath "$programOutp
 
 1. Choose the next three-part asset version and the oldest supported three-part program version. Increase the asset version for each new package. For a character format change, release a program version that can read both the installed packs and the new schema before requiring that schema in the next asset package.
 2. Run the [artwork packaging commands](#artwork-packaging) on Windows. Microsoft Edge WebView2 Runtime generates Spine frames on demand.
-3. In `JeffLiHK/art_pet_assets`, create and push the matching `vX.Y.Z` tag. Attach all four output files to the public, stable Release and mark it as latest. Use `gh release create <tag> <models-zip> <ja-zip> <zh-CN-zip> <manifest> --repo JeffLiHK/art_pet_assets --verify-tag --latest --title <title> --notes-file <file>`. Keep the attachment names stable and assign a new version when replacing a published payload.
-4. Query the public [asset latest release endpoint](https://api.github.com/repos/JeffLiHK/art_pet_assets/releases/latest). Verify all four downloads and SHA-256 digests. On a clean compatible build, click 「更新全部模型」 and confirm that models, subtitles, and Japanese audio install with empty Spine caches. Restart, select a model in the wardrobe, then check manual model build and deletion. Download and delete Mandarin independently. Verify that clients below the minimum version decline the download.
+3. In `JeffLiHK/ark_pet_assets`, create and push the matching `vX.Y.Z` tag. Attach all four output files to the public, stable Release and mark it as latest. Use `gh release create <tag> <models-zip> <ja-zip> <zh-CN-zip> <manifest> --repo JeffLiHK/ark_pet_assets --verify-tag --latest --title <title> --notes-file <file>`. Keep the attachment names stable and assign a new version when replacing a published payload.
+4. Query the public [asset latest release endpoint](https://api.github.com/repos/JeffLiHK/ark_pet_assets/releases/latest). Verify all four downloads and SHA-256 digests. On a clean compatible build, click 「更新全部模型」 and confirm that models, subtitles, and Japanese audio install with empty Spine caches. Restart, select a model in the wardrobe, then check manual model build and deletion. Download and delete Mandarin independently. Verify that clients below the minimum version decline the download.
 
 #### Artwork packaging
 
