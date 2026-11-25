@@ -1,0 +1,31 @@
+{
+  "id": "hoolheyak",
+  "displayName": "霍爾海雅",
+  "defaultOutfitId": "default",
+  "outfits": [
+    {
+      "id": "default",
+      "name": "預設造型",
+      "model": "4027_heyak",
+      "portrait": "char_4027_heyak_1.png"
+    },
+    {
+      "id": "elite-2",
+      "name": "精英二立繪",
+      "sharedModel": "default",
+      "portrait": "char_4027_heyak_2.png"
+    },
+    {
+      "id": "winds-of-time",
+      "name": "歷世流風",
+      "model": "4027_heyak_ambienceSynesthesia#4",
+      "portrait": "char_4027_heyak_ambiencesynesthesia#4.png"
+    },
+    {
+      "id": "ritual-of-immortality",
+      "name": "恆久祭禮",
+      "model": "4027_heyak_epoque#50",
+      "portrait": "char_4027_heyak_epoque#50.png"
+    }
+  ]
+}

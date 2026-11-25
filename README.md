@@ -17,7 +17,7 @@ dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
 - 右鍵選「轉身」可水平翻轉目前小人。在「設定 → 一般」開啟自由模式後，有 Move 動畫的小人會在目前螢幕的工作區行走、轉身和休息。互動期間會暫停走動。
 - 從小人右鍵選單或通知區選「新增一隻小人」，會新增相同造型的小人。每隻可獨立換裝、拖曳和隱藏。通知區的「管理小人」可找回隱藏的小人或移除新增的小人。重新啟動時從一隻小人開始。
 - 右鍵選單和工作列通知區都可開啟設定視窗。「一般」可調整縮放、幀率、待機循環次數和互動模式，也可為目前 Windows 使用者啟用登入時啟動。「外觀」可分別調整高亮描邊和陰影。「語音與字幕」可調整配音、字幕和語音音量，音量設為 0% 即靜音。循環次數可直接輸入，按 Enter 或離開欄位即可套用。畫面與語音偏好會自動保存到 `local-data/settings.json`。關閉互動模式後，滑鼠會穿透角色，仍可從通知區開設定恢復。
-- 在「設定 → 更新」可分別檢查程式和霍爾海雅美術資源。「檢查程式更新」在 Windows x64 自包含發佈版找到新版時可下載並重新啟動。全新安裝可用「檢查美術更新」取得霍爾海雅，下載成功後下次啟動生效。兩種更新都會驗證 GitHub 提供的 SHA-256。
+- 在「設定 → 更新」可分別檢查程式和霍爾海雅美術資源。「檢查程式更新」在 Windows x64 自包含發佈版找到新版時可下載並重新啟動。下載霍爾海雅後，程式會透過本機的 Microsoft Edge WebView2 Runtime 在背景生成並驗證影格，下次啟動時使用已生成的快取。兩種更新都會驗證 GitHub 提供的 SHA-256。
 - 從通知區的 **Art Pet** 圖示可開衣櫃、顯示、隱藏、切換置頂、移回主螢幕右下角或結束。找不到圖示時，展開通知區的隱藏圖示。雙擊圖示會顯示角色。
 - 造型、位置、置頂及顯示狀態在當次執行期間有效。再次啟動會套用預設造型和桌面位置。同一 Windows 登入工作階段只會執行一個實例。
 
@@ -47,6 +47,8 @@ dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --
 
 正式 Release 使用 `vX.Y` 或 `vX.Y.Z` 標籤，專案檔的 `Version` 使用對應的三段版本號，例如 `v1.3` 對應 `1.3.0`。程式包包含程式和執行環境。從對應標籤建置時，每次請使用全新的輸出資料夾。
 
+首次建置會下載並驗證固定版本的 Spine 3.8 WebGL Runtime，程式將它內嵌供離線轉檔。對外發佈程式前，請確認符合 [Spine Runtime 授權](https://github.com/EsotericSoftware/spine-runtimes/blob/8b4844bd4b193ba9e54487ed397a777993cbad56/LICENSE)。
+
 ```powershell
 dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -o artifacts/program-v1.3.0/publish
 Compress-Archive -Path artifacts/program-v1.3.0/publish/* -DestinationPath artifacts/program-v1.3.0/ArtPet-win-x64.zip
@@ -60,7 +62,7 @@ Compress-Archive -Path artifacts/program-v1.3.0/publish/* -DestinationPath artif
 pwsh -File scripts/BuildHoolheyakAssetRelease.ps1 -AssetVersion 1.0.0 -MinAppVersion 1.3.0
 ```
 
-將 `artifacts/assets-v1.0.0/` 內的兩個檔案附加到 `JeffLiHK/art_pet_assets` 的 `v1.0.0` Release。設定頁下載後會將資源安裝到 `local-data/managed-assets/`。啟動時會優先載入啟用中的版本，讀取失敗時會嘗試上一個版本、隨附素材及本機匯入素材。 [完整發佈流程](AGENTS.md#publish-github-releases)
+腳本從 `Ark-Models/models` 和 `ArknightsGameResource/portrait` 打包 Spine 骨骼、圖集、貼圖和獨立立繪。將輸出的 ZIP 和版本清單附加到 `JeffLiHK/art_pet_assets` 對應的 Release。安裝時，程式將生成的 PNG 影格快取到 `local-data/managed-assets/`，驗證完成才啟用新版。啟動時若無法讀取新版，會嘗試上一個版本、隨附素材及本機匯入素材。 [完整發佈流程](AGENTS.md#publish-github-releases)
 
 ## 驗收條件
 

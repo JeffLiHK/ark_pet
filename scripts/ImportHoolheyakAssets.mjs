@@ -10,16 +10,11 @@ const localData = path.join(root, "local-data");
 const tools = path.join(localData, "tools");
 const models = path.join(root, "Ark-Models", "models");
 const portraits = path.join(root, "ArknightsGameResource", "portrait");
-const character = "霍爾海雅";
 const canvasSize = 320;
 const fps = 60;
 const animations = { idle: "Relax", move: "Move", sit: "Sit", sleep: "Sleep", touch: "Interact" };
-const outfits = [
-    { id: "default", name: "預設造型", model: "4027_heyak", portrait: "char_4027_heyak_1.png" },
-    { id: "elite-2", name: "精英二立繪", sharedModel: "default", portrait: "char_4027_heyak_2.png" },
-    { id: "winds-of-time", name: "歷世流風", model: "4027_heyak_ambienceSynesthesia#4", portrait: "char_4027_heyak_ambiencesynesthesia#4.png" },
-    { id: "ritual-of-immortality", name: "恆久祭禮", model: "4027_heyak_epoque#50", portrait: "char_4027_heyak_epoque#50.png" },
-];
+const { id, displayName: character, defaultOutfitId, outfits } = JSON.parse(
+    await readFile(new URL("./HoolheyakSource.json", import.meta.url), "utf8"));
 
 const require = createRequire(path.join(tools, "package.json"));
 if (!existsSync(path.join(tools, "node_modules", "playwright-core"))) {
@@ -63,7 +58,8 @@ if (path.dirname(await realpath(stage)) !== canonicalData) {
 try {
     const page = await browser.newPage();
     await page.addScriptTag({ path: runtimeFile });
-    await page.evaluate(startRenderer, { size: canvasSize, fps, animations });
+    await page.addScriptTag({ path: path.join(root, "src/ArtPet.Windows/Media/SpineFrameRenderer.js") });
+    await page.evaluate(args => window.startRenderer(args), { size: canvasSize, fps, animations });
 
     const modelStage = path.join(stage, "models");
     const assetStage = path.join(stage, "assets");
@@ -114,7 +110,7 @@ try {
         });
     }
 
-    const manifest = { schemaVersion: 1, id: "hoolheyak", displayName: character, defaultOutfitId: "default", canvas, outfits: [...manifestOutfits.values()] };
+    const manifest = { schemaVersion: 1, id, displayName: character, defaultOutfitId, canvas, outfits: [...manifestOutfits.values()] };
     await writeFile(path.join(assetStage, "character.json"), JSON.stringify(manifest, null, 2) + "\n");
     await installPack([
         { source: modelStage, destination: path.join(localData, "models", character) },
@@ -185,94 +181,4 @@ async function installPack(entries) {
     if (saved.length > 0) {
         console.log(`Previous model and asset folders were backed up in ${backups}.`);
     }
-}
-
-function startRenderer({ size, fps, animations }) {
-    const spine = window.spine;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = size;
-    const gl = canvas.getContext("webgl", { alpha: true, antialias: true, preserveDrawingBuffer: true });
-    if (!gl) throw new Error("WebGL is unavailable in the export browser.");
-
-    const scene = new spine.webgl.SceneRenderer(canvas, gl);
-    const models = new Map();
-    const bounds = { left: 0, right: 0, top: 0, bottom: 0 };
-    const offset = new spine.Vector2();
-    const extent = new spine.Vector2();
-    const vertices = [];
-
-    function pose(skeleton, animation, index) {
-        skeleton.setToSetupPose();
-        animation.apply(skeleton, 0, index / fps, false, null, 1, spine.MixBlend.replace, spine.MixDirection.mixIn);
-        skeleton.updateWorldTransform();
-    }
-
-    window.renderer = {
-        async load({ id, atlas, texture, png, binary }) {
-            const image = new Image();
-            image.src = "data:image/png;base64," + png;
-            await image.decode();
-            const textureAtlas = new spine.TextureAtlas(atlas, file => {
-                if (file !== texture) throw new Error(`Unexpected atlas page ${file}`);
-                // Ark-Models PNGs already contain premultiplied alpha.
-                return new spine.webgl.GLTexture(scene.context, image);
-            });
-            const reader = new spine.SkeletonBinary(new spine.AtlasAttachmentLoader(textureAtlas));
-            const data = reader.readSkeletonData(Uint8Array.from(atob(binary), char => char.charCodeAt(0)));
-            const skeleton = new spine.Skeleton(data);
-            const clips = {};
-            const counts = {};
-            for (const [key, name] of Object.entries(animations)) {
-                const animation = data.findAnimation(name);
-                if (!animation) {
-                    throw new Error(`${id} has no ${name} animation. Found: ${data.animations.map(item => item.name).join(", ")}`);
-                }
-                clips[key] = animation;
-                const count = Math.ceil(animation.duration * fps - 0.0001);
-                if (count < 1 || count > 4096) throw new Error(`Invalid duration for ${id}/${name}`);
-                counts[key] = count;
-                for (let index = 0; index < count; index++) {
-                    pose(skeleton, animation, index);
-                    skeleton.getBounds(offset, extent, vertices);
-                    if (!Number.isFinite(offset.x + offset.y + extent.x + extent.y)) continue;
-                    bounds.left = Math.min(bounds.left, offset.x);
-                    bounds.right = Math.max(bounds.right, offset.x + extent.x);
-                    bounds.bottom = Math.min(bounds.bottom, offset.y);
-                    bounds.top = Math.max(bounds.top, offset.y + extent.y);
-                }
-            }
-            models.set(id, { skeleton, clips });
-            return counts;
-        },
-        frame() {
-            // Give every animation and outfit the same camera and model origin.
-            const padding = 12;
-            const unitsPerPixel = Math.max(bounds.right - bounds.left, bounds.top - bounds.bottom) / (size - padding * 2);
-            if (!(unitsPerPixel > 0)) throw new Error("No visible skeleton bounds were found.");
-            const x = (bounds.left + bounds.right) / 2;
-            const y = (bounds.top + bounds.bottom) / 2;
-            scene.camera.position.set(x, y, 0);
-            scene.camera.setViewport(size * unitsPerPixel, size * unitsPerPixel);
-            gl.viewport(0, 0, size, size);
-            return {
-                width: size, height: size,
-                anchorX: Math.round(size / 2 - x / unitsPerPixel),
-                anchorY: Math.round(size / 2 + y / unitsPerPixel),
-            };
-        },
-        render({ id, clip, start, end }) {
-            const { skeleton, clips } = models.get(id);
-            const frames = [];
-            for (let index = start; index < end; index++) {
-                pose(skeleton, clips[clip], index);
-                gl.clearColor(0, 0, 0, 0);
-                gl.clear(gl.COLOR_BUFFER_BIT);
-                scene.begin();
-                scene.drawSkeleton(skeleton, true);
-                scene.end();
-                frames.push(canvas.toDataURL("image/png").split(",", 2)[1]);
-            }
-            return frames;
-        },
-    };
 }

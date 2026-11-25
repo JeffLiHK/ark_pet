@@ -15,7 +15,7 @@ internal sealed record AssetReleaseManifest(string PackId, Version AssetVersion,
         SchemaVersion > 0 && IsReleaseVersion(MinAppVersion);
 
     internal bool Supports(Version appVersion) =>
-        SchemaVersion == CharacterPack.SupportedSchemaVersion && MinAppVersion <= appVersion;
+        SchemaVersion is (CharacterPack.SupportedSchemaVersion or SpineFrameCache.SchemaVersion) && MinAppVersion <= appVersion;
 
     internal static bool IsReleaseVersion(Version? version) => version is { Build: >= 0, Revision: -1 };
 }

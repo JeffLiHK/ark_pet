@@ -243,7 +243,8 @@ internal partial class SettingsWindow : Window
         AssetStatus.Text = "正在下載並驗證美術資源…";
         try
         {
-            await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _startupHoolheyak?.Installation, token), token);
+            var progress = new Progress<string>(message => AssetStatus.Text = message);
+            await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _startupHoolheyak?.Installation, progress, token), token);
             _availableAssets = null;
             InstallAssetButton.Visibility = Visibility.Collapsed;
             RefreshAssetVersion();

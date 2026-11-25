@@ -19,7 +19,28 @@
   <ItemGroup>
     <Resource Include="Media/Sprout.ico" />
     <EmbeddedResource Include="Desktop/ApplyUpdate.ps1" LogicalName="ArtPet.ApplyUpdate.ps1" />
+    <EmbeddedResource Include="Media/SpineFrameRenderer.js" LogicalName="ArtPet.SpineFrameRenderer.js" />
+    <EmbeddedResource Include="$(BaseIntermediateOutputPath)spine/spine-webgl.js" LogicalName="ArtPet.SpineWebGL.js" />
+    <None Include="$(BaseIntermediateOutputPath)spine/Spine-Runtime-LICENSE.txt"
+          Link="Spine-Runtime-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4370.26" />
   </ItemGroup>
+  <Target Name="PrepareSpineRuntime" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <SpineRevision>8b4844bd4b193ba9e54487ed397a777993cbad56</SpineRevision>
+      <SpineRuntimeDirectory>$(BaseIntermediateOutputPath)spine</SpineRuntimeDirectory>
+    </PropertyGroup>
+    <DownloadFile Condition="!Exists('$(SpineRuntimeDirectory)/spine-webgl.js')"
+                  SourceUrl="https://raw.githubusercontent.com/EsotericSoftware/spine-runtimes/$(SpineRevision)/spine-ts/build/spine-webgl.js"
+                  DestinationFolder="$(SpineRuntimeDirectory)" />
+    <VerifyFileHash File="$(SpineRuntimeDirectory)/spine-webgl.js" Algorithm="SHA256"
+                    Hash="4b108bad314c152bf0ff7a7f56fce5c98073f05a2bfa53e880d6c24b6f7c3aa5" />
+    <DownloadFile Condition="!Exists('$(SpineRuntimeDirectory)/Spine-Runtime-LICENSE.txt')"
+                  SourceUrl="https://raw.githubusercontent.com/EsotericSoftware/spine-runtimes/$(SpineRevision)/LICENSE"
+                  DestinationFolder="$(SpineRuntimeDirectory)" DestinationFileName="Spine-Runtime-LICENSE.txt" />
+    <VerifyFileHash File="$(SpineRuntimeDirectory)/Spine-Runtime-LICENSE.txt" Algorithm="SHA256"
+                    Hash="6142ee6cc2c03d3a918793e4750ae772bd3755c534d4a35e559e301acf51ec39" />
+  </Target>
   <ItemGroup Condition="'$(BundleHoolheyak)' == 'true'">
     <Content Include="$(HoolheyakPackDirectory)\character.json;$(HoolheyakPackDirectory)\**\*.png;$(HoolheyakPackDirectory)\**\*.jpg;$(HoolheyakPackDirectory)\**\*.jpeg"
              Link="assets\$(HoolheyakCharacterFolder)\%(RecursiveDir)%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />

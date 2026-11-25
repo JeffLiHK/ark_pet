@@ -77,7 +77,8 @@ internal static class AssetReleaseUpdater
         return new(new(manifest, package), $"可下載霍爾海雅美術資源 {version}。");
     }
 
-    internal static async Task InstallAsync(AssetReleaseUpdate update, AssetInstallation? running, CancellationToken token)
+    internal static async Task InstallAsync(AssetReleaseUpdate update, AssetInstallation? running,
+        IProgress<string> progress, CancellationToken token)
     {
         await InstallGate.WaitAsync(token);
         string staging = Path.Combine(ManagedCharacterAssets.RootDirectory, $".stage-{Guid.NewGuid():N}");
@@ -97,7 +98,15 @@ internal static class AssetReleaseUpdater
             }
 
             string payload = Path.Combine(staging, "payload");
-            ExtractPackage(archive, payload, token);
+            bool isSpine = update.Manifest.SchemaVersion == SpineFrameCache.SchemaVersion;
+            ExtractPackage(archive, payload, isSpine, token);
+            if (isSpine)
+            {
+                progress.Report("正在本機產生並驗證動畫影格…");
+                string generated = Path.Combine(staging, "generated");
+                await SpineFrameCache.GenerateAsync(payload, generated, token);
+                payload = generated;
+            }
             if (CharacterPack.TryOpen(payload) is not { Id: ManagedCharacterAssets.PackId } pack)
             {
                 throw new InvalidDataException("美術資源包缺少有效的霍爾海雅角色清單。");
@@ -114,7 +123,7 @@ internal static class AssetReleaseUpdater
         }
     }
 
-    private static void ExtractPackage(string archive, string payload, CancellationToken token)
+    private static void ExtractPackage(string archive, string payload, bool isSpine, CancellationToken token)
     {
         using ZipArchive zip = ZipFile.OpenRead(archive);
         if (zip.Entries.Count > MaximumEntries)
@@ -145,9 +154,13 @@ internal static class AssetReleaseUpdater
 
             string destination = Path.GetFullPath(path, payload);
             string extension = Path.GetExtension(path).ToLowerInvariant();
+            bool allowedExtension = isSpine
+                ? extension is ".png" or ".atlas" or ".skel"
+                : extension is ".png" or ".jpg" or ".jpeg";
             remaining -= entry.Length;
             if (!destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
-                (path != "character.json" && extension is not (".png" or ".jpg" or ".jpeg")) ||
+                (path != "character.json" && !allowedExtension) ||
+                (isSpine && entry.Length > SpineFrameCache.MaximumSourceFileSize) ||
                 remaining < 0)
             {
                 throw new InvalidDataException("美術資源包含有不支援的檔案或超出大小上限。");
