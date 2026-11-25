@@ -15,7 +15,8 @@ internal sealed record AssetReleaseCheck(AssetReleaseUpdate? Update, string Mess
 internal static class AssetReleaseUpdater
 {
     private const string Repository = "JeffLiHK/art_pet_assets";
-    private const string ArchiveName = "ArtPet-hoolheyak-assets.zip";
+    private const string ArchiveName = "ArtPet-assets.zip";
+    private const string LegacyArchiveName = "ArtPet-hoolheyak-assets.zip";
     private const long MaximumArchiveSize = 512L * 1024 * 1024;
     private const long MaximumExtractedSize = 1024L * 1024 * 1024;
     private const int MaximumEntries = 20_000;
@@ -48,8 +49,7 @@ internal static class AssetReleaseUpdater
             return new(null, "已是最新美術資源。");
         }
 
-        if (GitHubReleaseSource.FindPackage(Repository, release, ArchiveName) is not { Size: <= MaximumArchiveSize } package ||
-            GitHubReleaseSource.FindPackage(Repository, release, ManagedCharacterAssets.ManifestName) is not { Size: <= 16 * 1024 } metadata)
+        if (GitHubReleaseSource.FindPackage(Repository, release, ManagedCharacterAssets.ManifestName) is not { Size: <= 16 * 1024 } metadata)
         {
             return new(null, "GitHub 尚未提供可驗證的美術資源包和版本清單。");
         }
@@ -74,7 +74,13 @@ internal static class AssetReleaseUpdater
             return new(null, $"目前的程式版本無法讀取美術資源 {version}。");
         }
 
-        return new(new(manifest, package), $"可下載霍爾海雅美術資源 {version}。");
+        string archiveName = manifest.IsCatalog ? ArchiveName : LegacyArchiveName;
+        if (GitHubReleaseSource.FindPackage(Repository, release, archiveName) is not { Size: <= MaximumArchiveSize } package)
+        {
+            return new(null, "GitHub 尚未提供可驗證的美術資源包。");
+        }
+
+        return new(new(manifest, package), $"找到美術資源 {version}。");
     }
 
     internal static async Task InstallAsync(AssetReleaseUpdate update, AssetInstallation? running,
@@ -98,21 +104,27 @@ internal static class AssetReleaseUpdater
             }
 
             string payload = Path.Combine(staging, "payload");
-            bool isSpine = update.Manifest.SchemaVersion == SpineFrameCache.SchemaVersion;
-            ExtractPackage(archive, payload, isSpine, token);
-            if (isSpine)
+            ExtractPackage(archive, payload, update.Manifest.SchemaVersion, token);
+            if (update.Manifest.IsCatalog)
             {
-                progress.Report("正在本機產生並驗證動畫影格…");
-                string generated = Path.Combine(staging, "generated");
-                await SpineFrameCache.GenerateAsync(payload, generated, token);
-                payload = generated;
+                await PrepareCatalogAsync(payload, progress, token);
             }
-            if (CharacterPack.TryOpen(payload) is not { Id: ManagedCharacterAssets.PackId } pack)
+            else
             {
-                throw new InvalidDataException("美術資源包缺少有效的霍爾海雅角色清單。");
+                if (update.Manifest.SchemaVersion == SpineFrameCache.SchemaVersion)
+                {
+                    progress.Report("正在本機產生並驗證動畫影格…");
+                    string generated = Path.Combine(staging, "generated");
+                    await SpineFrameCache.GenerateAsync(payload, generated, ManagedCharacterAssets.LegacyPackId, token);
+                    payload = generated;
+                }
+                if (CharacterPack.TryOpen(payload) is not { Id: ManagedCharacterAssets.LegacyPackId } pack)
+                {
+                    throw new InvalidDataException("美術資源包缺少有效的霍爾海雅角色清單。");
+                }
+                pack.ValidateArtwork(token);
             }
 
-            pack.ValidateForInstall(token);
             AssetInstallation installed = ManagedCharacterAssets.Activate(payload, update.Manifest, running, pending, token);
             Volatile.Write(ref _pending, installed);
         }
@@ -123,7 +135,55 @@ internal static class AssetReleaseUpdater
         }
     }
 
-    private static void ExtractPackage(string archive, string payload, bool isSpine, CancellationToken token)
+    private static async Task PrepareCatalogAsync(string payload, IProgress<string> progress, CancellationToken token)
+    {
+        ArtworkCatalog catalog;
+        try
+        {
+            catalog = ArtworkCatalog.Read(payload);
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException("無法讀取完整美術資源包的角色清單。", error);
+        }
+
+        ArtworkCatalog.LoadAppIcon(payload);
+        for (int index = 0; index < catalog.Characters.Length; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            ArtworkCharacter character = catalog.Characters[index];
+            progress.Report($"正在準備角色美術資源（{index + 1}/{catalog.Characters.Length}）…");
+            if (character.HasSpineSource)
+            {
+                await SpineFrameCache.GenerateAsync(character.SourceDirectory(payload), character.PlaybackDirectory(payload),
+                    character.Id, token);
+            }
+            character.LoadValidated(payload, token);
+        }
+    }
+
+    private static bool IsAllowedAsset(string path, int schemaVersion)
+    {
+        string extension = Path.GetExtension(path).ToLowerInvariant();
+        if (schemaVersion == ArtworkCatalog.SchemaVersion)
+        {
+            if (path is ArtworkCatalog.CatalogName or ArtworkCatalog.IconName)
+            {
+                return true;
+            }
+            if (!path.StartsWith("characters\\", StringComparison.Ordinal) && !path.StartsWith("images\\", StringComparison.Ordinal))
+            {
+                return false;
+            }
+            return Path.GetFileName(path) == "character.json" && path.StartsWith("characters\\", StringComparison.Ordinal) ||
+                extension is ".png" or ".jpg" or ".jpeg" or ".ico" or ".gif" or ".bmp" or ".tif" or ".tiff" or ".webp" or ".atlas" or ".skel";
+        }
+
+        return path == "character.json" || extension is ".png" or ".jpg" or ".jpeg" ||
+            schemaVersion == SpineFrameCache.SchemaVersion && extension is (".atlas" or ".skel");
+    }
+
+    private static void ExtractPackage(string archive, string payload, int schemaVersion, CancellationToken token)
     {
         using ZipArchive zip = ZipFile.OpenRead(archive);
         if (zip.Entries.Count > MaximumEntries)
@@ -153,14 +213,10 @@ internal static class AssetReleaseUpdater
             }
 
             string destination = Path.GetFullPath(path, payload);
-            string extension = Path.GetExtension(path).ToLowerInvariant();
-            bool allowedExtension = isSpine
-                ? extension is ".png" or ".atlas" or ".skel"
-                : extension is ".png" or ".jpg" or ".jpeg";
             remaining -= entry.Length;
             if (!destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
-                (path != "character.json" && !allowedExtension) ||
-                (isSpine && entry.Length > SpineFrameCache.MaximumSourceFileSize) ||
+                !IsAllowedAsset(path, schemaVersion) ||
+                (schemaVersion == SpineFrameCache.SchemaVersion && entry.Length > SpineFrameCache.MaximumSourceFileSize) ||
                 remaining < 0)
             {
                 throw new InvalidDataException("美術資源包含有不支援的檔案或超出大小上限。");

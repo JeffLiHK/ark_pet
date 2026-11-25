@@ -20,7 +20,7 @@ public partial class App : Application
     private PetEntry? _primary;
     private PetSettings _settings = new();
     private CharacterPack[] _installedPacks = [];
-    private CharacterPack? _startupHoolheyak;
+    private AssetSnapshot? _artwork;
     private SettingsWindow? _settingsWindow;
     private bool _exiting;
 
@@ -36,7 +36,11 @@ public partial class App : Application
         }
 
         _settings = _settingsStore.Load();
-        _installedPacks = await Task.Run(() => CharacterPack.FindInstalled(ReleaseUpdater.CurrentVersion).ToArray());
+        (_artwork, _installedPacks) = await Task.Run(() =>
+        {
+            AssetSnapshot? artwork = ManagedCharacterAssets.LoadInstalled(ReleaseUpdater.CurrentVersion);
+            return (artwork, CharacterPack.FindInstalled(artwork).ToArray());
+        });
         if (_exiting)
         {
             return;
@@ -68,15 +72,14 @@ public partial class App : Application
             }
         }
 
-        _startupHoolheyak = session.Pack is { Id: ManagedCharacterAssets.PackId } hoolheyak ? hoolheyak : null;
         _tray = new TrayIcon(primary.Window, ExitApplication, OpenSettings, WardrobeCommand(primary),
-            () => AddPet(primary), GetTrayPets);
+            () => AddPet(primary), GetTrayPets, _artwork?.AppIcon);
         primary.Window.ShowPet();
     }
 
     private PetEntry RegisterPet(PetSession session, int slot)
     {
-        var window = new PetWindow(slot);
+        var window = new PetWindow(slot) { Icon = _artwork?.AppIcon };
         var pet = new PetEntry(slot, window, session);
         _pets.Add(pet);
         window.ApplySettings(_settings);
@@ -135,14 +138,15 @@ public partial class App : Application
         pet.Displayed = outfit;
         pet.Window.SetVoiceCharacter(pack.Id);
         pet.Window.SetOutfit(outfit);
-        var icon = CharacterIcon.Create(outfit);
+        var icon = outfit.Icon ?? (pack.Id == ArtworkCatalog.SproutId ? _artwork?.AppIcon : null) ??
+            CharacterIcon.Create(outfit) ?? _artwork?.AppIcon;
         pet.Window.Icon = icon;
         if (pet == _primary)
         {
             _tray?.SetCharacterIcon(icon);
             if (_settingsWindow is { } settings)
             {
-                settings.Icon = icon;
+                settings.Icon = _artwork?.AppIcon ?? icon;
             }
         }
 
@@ -165,7 +169,10 @@ public partial class App : Application
             return;
         }
 
-        var settingsWindow = new SettingsWindow(_settings, _startupHoolheyak) { Icon = _primary?.Window.Icon };
+        var settingsWindow = new SettingsWindow(_settings, _artwork?.Installation)
+        {
+            Icon = _artwork?.AppIcon ?? _primary?.Window.Icon
+        };
         _settingsWindow = settingsWindow;
         settingsWindow.SettingsSelected += settings =>
         {

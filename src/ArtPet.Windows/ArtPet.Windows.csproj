@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Media/Sprout.ico</ApplicationIcon>
-    <Version>1.2.0</Version>
+    <Version>1.3.0</Version>
     <HoolheyakCharacterFolder>霍爾海雅</HoolheyakCharacterFolder>
     <ProjectAssetsDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets</ProjectAssetsDirectory>
     <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)\character.json')">$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)</HoolheyakPackDirectory>
@@ -18,6 +18,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Media/Sprout.ico" />
+    <InternalsVisibleTo Include="ArtPet.ExportSproutArtwork" />
     <EmbeddedResource Include="Desktop/ApplyUpdate.ps1" LogicalName="ArtPet.ApplyUpdate.ps1" />
     <EmbeddedResource Include="Media/SpineFrameRenderer.js" LogicalName="ArtPet.SpineFrameRenderer.js" />
     <EmbeddedResource Include="$(BaseIntermediateOutputPath)spine/spine-webgl.js" LogicalName="ArtPet.SpineWebGL.js" />

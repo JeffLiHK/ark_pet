@@ -328,14 +328,10 @@
                     </Border>
                     <Border Style="{StaticResource SettingRow}">
                         <StackPanel>
-                            <TextBlock Text="霍爾海雅美術資源" FontWeight="SemiBold" />
+                            <TextBlock Text="美術資源" FontWeight="SemiBold" />
                             <TextBlock x:Name="AssetVersionText" Style="{StaticResource Hint}" Margin="0,4,0,8" />
-                            <WrapPanel>
-                                <Button x:Name="CheckAssetButton" Content="檢查美術更新" Padding="12,6"
-                                        Click="CheckForAssets" />
-                                <Button x:Name="InstallAssetButton" Content="下載美術資源" Padding="12,6" Margin="8,0,0,0"
-                                        Visibility="Collapsed" Click="InstallAssets" />
-                            </WrapPanel>
+                            <Button x:Name="CheckAssetButton" Content="檢查資源更新" Padding="12,6"
+                                    HorizontalAlignment="Left" Click="CheckForAssets" />
                             <TextBlock x:Name="AssetStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
                                        AutomationProperties.LiveSetting="Polite" />
                         </StackPanel>

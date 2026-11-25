@@ -29,12 +29,12 @@ internal static class SpineFrameCache
         ["touch"] = "Interact"
     };
 
-    internal static async Task GenerateAsync(string source, string destination, CancellationToken token)
+    internal static async Task GenerateAsync(string source, string destination, string characterId, CancellationToken token)
     {
         SourcePack pack;
         try
         {
-            pack = ReadSourcePack(source);
+            pack = ReadSourcePack(source, characterId);
         }
         catch (JsonException error)
         {
@@ -82,12 +82,13 @@ internal static class SpineFrameCache
         await completion.Task;
     }
 
-    private static SourcePack ReadSourcePack(string source)
+    private static SourcePack ReadSourcePack(string source, string characterId)
     {
         using FileStream manifest = File.OpenRead(Path.Combine(source, "character.json"));
         if (manifest.Length > 16 * 1024 ||
             JsonSerializer.Deserialize<SourcePack>(manifest, ManagedCharacterAssets.JsonOptions) is not
-                { SchemaVersion: SchemaVersion, Id: ManagedCharacterAssets.PackId, Outfits: { Length: > 0 and <= 16 } outfits } pack ||
+                { SchemaVersion: SchemaVersion, Outfits: { Length: > 0 and <= 16 } outfits } pack ||
+            pack.Id != characterId ||
             string.IsNullOrWhiteSpace(pack.DisplayName) ||
             outfits.Any(outfit => outfit is null || !IsIdentifier(outfit.Id) || !IsIdentifier(outfit.ModelId) ||
                 string.IsNullOrWhiteSpace(outfit.DisplayName)) ||
@@ -100,7 +101,7 @@ internal static class SpineFrameCache
         return pack;
     }
 
-    private static bool IsIdentifier(string? value) =>
+    internal static bool IsIdentifier(string? value) =>
         value is not null && Regex.IsMatch(value, @"\A[a-z0-9][a-z0-9-]{0,39}\z");
 
     private static async Task RenderAsync(SourcePack pack, string source, string destination, CancellationToken token)
@@ -158,15 +159,15 @@ internal static class SpineFrameCache
         foreach (string id in pack.Outfits.Select(outfit => outfit.ModelId).Distinct(StringComparer.Ordinal))
         {
             string directory = Path.Combine(source, "models", id);
-            string atlas = await File.ReadAllTextAsync(Path.Combine(directory, "model.atlas"), token);
+            string atlas = await File.ReadAllTextAsync(BoundedSourceFile(directory, "model.atlas"), token);
             string texture = atlas.TrimStart().Split('\n', 2)[0].TrimEnd('\r');
             if (texture != Path.GetFileName(texture) || texture.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
                 !texture.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException("Spine 圖集的貼圖路徑無效。");
             }
-            string png = Convert.ToBase64String(await File.ReadAllBytesAsync(Path.Combine(directory, texture), token));
-            string binary = Convert.ToBase64String(await File.ReadAllBytesAsync(Path.Combine(directory, "model.skel"), token));
+            string png = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, texture), token));
+            string binary = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, "model.skel"), token));
             JsonElement result = await EvaluateAsync(webView, $"window.renderer.load({Json(new { id, atlas, texture, png, binary })})", token);
             var counts = result.Deserialize<Dictionary<string, int>>(ManagedCharacterAssets.JsonOptions);
             if (counts is null || counts.Count != Animations.Count ||
@@ -224,15 +225,41 @@ internal static class SpineFrameCache
             token.ThrowIfCancellationRequested();
             string portrait = $"portraits/{outfit.Id}.png";
             File.Copy(Path.Combine(source, portrait), Path.Combine(destination, portrait));
+            string? icon = CopyOptionalImage(source, destination, $"icons/{outfit.Id}.ico");
+            string? preview = CopyOptionalImage(source, destination, $"previews/{outfit.Id}.png");
             Dictionary<string, ClipDefinition> clips = clipsByModel[outfit.ModelId];
-            outfits.Add(new(outfit.Id, outfit.DisplayName, $"{clips["idle"].Directory}/0000.png",
-                clips["idle"], clips["touch"], clips["move"], clips["sit"], clips["sleep"], portrait));
+            outfits.Add(new(outfit.Id, outfit.DisplayName, preview ?? $"{clips["idle"].Directory}/0000.png",
+                clips["idle"], clips["touch"], clips["move"], clips["sit"], clips["sleep"], portrait, outfit.MoveFacesLeft,
+                icon));
         }
 
         await File.WriteAllTextAsync(Path.Combine(destination, "character.json"), Json(new
         {
             schemaVersion = CharacterPack.SupportedSchemaVersion, pack.Id, pack.DisplayName, pack.DefaultOutfitId, canvas, outfits
         }), token);
+    }
+
+    private static string BoundedSourceFile(string directory, string name)
+    {
+        string path = Path.Combine(directory, name);
+        if (new FileInfo(path).Length is 0 or > MaximumSourceFileSize)
+        {
+            throw new InvalidDataException("Spine 檔案的大小無效。");
+        }
+        return path;
+    }
+
+    private static string? CopyOptionalImage(string source, string destination, string relative)
+    {
+        string input = Path.Combine(source, relative);
+        if (!File.Exists(input))
+        {
+            return null;
+        }
+        string output = Path.Combine(destination, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+        File.Copy(input, output);
+        return relative;
     }
 
     private static async Task<JsonElement> EvaluateAsync(CoreWebView2 webView, string expression, CancellationToken token)
@@ -266,5 +293,5 @@ internal static class SpineFrameCache
     }
 
     private sealed record SourcePack(int SchemaVersion, string Id, string DisplayName, string DefaultOutfitId, SourceOutfit[] Outfits);
-    private sealed record SourceOutfit(string Id, string DisplayName, string ModelId);
+    private sealed record SourceOutfit(string Id, string DisplayName, string ModelId, bool MoveFacesLeft = false);
 }

@@ -8,8 +8,8 @@ namespace ArtPet.Windows.Media;
 
 public partial class SproutVisual : UserControl
 {
-    private const double IdleCycleMs = 3100;
-    private const double ReactionMs = 620;
+    internal const double IdleCycleMs = 3100;
+    internal const double ReactionMs = 620;
     private readonly Stopwatch _clock = new();
     private bool _reacting;
     private long _lastFrame;
@@ -28,7 +28,7 @@ public partial class SproutVisual : UserControl
             return;
         }
 
-        SetReaction(false);
+        _reacting = false;
         RestartAnimation();
         CompositionTarget.Rendering += UpdateFrame;
     }
@@ -49,7 +49,7 @@ public partial class SproutVisual : UserControl
             return;
         }
 
-        SetReaction(true);
+        _reacting = true;
         RestartAnimation();
     }
 
@@ -57,7 +57,7 @@ public partial class SproutVisual : UserControl
     {
         if (_reacting && _clock.IsRunning)
         {
-            SetReaction(false);
+            _reacting = false;
             RestartAnimation();
         }
     }
@@ -84,13 +84,20 @@ public partial class SproutVisual : UserControl
         double elapsed = _clock.Elapsed.TotalMilliseconds;
         if (_reacting && elapsed >= ReactionMs)
         {
-            SetReaction(false);
+            _reacting = false;
             _clock.Restart();
             _lastFrame = 0;
             elapsed = 0;
         }
 
-        if (_reacting)
+        DrawPose(elapsed, _reacting);
+    }
+
+    internal void DrawPose(double elapsed, bool reacting)
+    {
+        Smile.Visibility = reacting ? Visibility.Collapsed : Visibility.Visible;
+        HappySmile.Visibility = reacting ? Visibility.Visible : Visibility.Collapsed;
+        if (reacting)
         {
             double progress = elapsed / ReactionMs;
             double lift = Math.Sin(Math.PI * progress);
@@ -109,12 +116,5 @@ public partial class SproutVisual : UserControl
         Breath.ScaleY = 1 - 0.045 * breathing;
         Blink.ScaleY = phase is >= 2150 and < 2300 ? 0.18 : 1;
         Sparkles.Opacity = 0;
-    }
-
-    private void SetReaction(bool reacting)
-    {
-        _reacting = reacting;
-        Smile.Visibility = reacting ? Visibility.Collapsed : Visibility.Visible;
-        HappySmile.Visibility = reacting ? Visibility.Visible : Visibility.Collapsed;
     }
 }

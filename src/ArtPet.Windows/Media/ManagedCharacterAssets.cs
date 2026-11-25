@@ -1,34 +1,40 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
+using System.Windows.Media.Imaging;
 
 namespace ArtPet.Windows.Media;
 
 internal sealed record AssetInstallation(Version Version, Guid Id);
+internal sealed record AssetSnapshot(AssetInstallation Installation, CharacterPack[] Packs, BitmapSource? AppIcon);
 
 internal sealed record AssetReleaseManifest(string PackId, Version AssetVersion, int SchemaVersion, Version MinAppVersion)
 {
-    internal bool IsValid => PackId == ManagedCharacterAssets.PackId && IsReleaseVersion(AssetVersion) &&
+    internal bool IsCatalog => SchemaVersion >= ArtworkCatalog.SchemaVersion;
+
+    internal bool IsValid => PackId == (IsCatalog ? ArtworkCatalog.PackId : ManagedCharacterAssets.LegacyPackId) &&
+        IsReleaseVersion(AssetVersion) &&
         SchemaVersion > 0 && IsReleaseVersion(MinAppVersion);
 
     internal bool Supports(Version appVersion) =>
-        SchemaVersion is (CharacterPack.SupportedSchemaVersion or SpineFrameCache.SchemaVersion) && MinAppVersion <= appVersion;
+        SchemaVersion is (CharacterPack.SupportedSchemaVersion or SpineFrameCache.SchemaVersion or ArtworkCatalog.SchemaVersion) &&
+        MinAppVersion <= appVersion;
 
     internal static bool IsReleaseVersion(Version? version) => version is { Build: >= 0, Revision: -1 };
 }
 
 internal static class ManagedCharacterAssets
 {
-    internal const string PackId = "hoolheyak";
+    internal const string LegacyPackId = "hoolheyak";
     internal const string ManifestName = "assets-manifest.json";
     internal static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    internal static string RootDirectory { get; } = Path.Combine(ProjectStorage.DataDirectory, "managed-assets", PackId);
+    // Keep the installation index readable across upgrades from the single-character release.
+    internal static string RootDirectory { get; } = Path.Combine(ProjectStorage.DataDirectory, "managed-assets", LegacyPackId);
     private static string StatePath => Path.Combine(RootDirectory, "active.json");
 
-    internal static IEnumerable<CharacterPack> FindInstalled(Version appVersion)
+    internal static AssetSnapshot? LoadInstalled(Version appVersion)
     {
         AssetState state = ReadState();
         foreach (AssetInstallation? installation in new[] { state.Active, state.Previous }.Distinct())
@@ -39,13 +45,34 @@ internal static class ManagedCharacterAssets
             }
 
             string directory = GetDirectory(installation);
-            if (TryRead<AssetReleaseManifest>(Path.Combine(directory, ManifestName)) is { IsValid: true } manifest &&
-                manifest.AssetVersion == installation.Version && manifest.Supports(appVersion) &&
-                CharacterPack.TryOpen(directory, installation) is { Id: PackId } pack)
+            if (TryRead<AssetReleaseManifest>(Path.Combine(directory, ManifestName)) is not { IsValid: true } manifest ||
+                manifest.AssetVersion != installation.Version || !manifest.Supports(appVersion))
             {
-                yield return pack;
+                continue;
+            }
+
+            try
+            {
+                if (manifest.IsCatalog)
+                {
+                    ArtworkCatalog catalog = ArtworkCatalog.Read(directory);
+                    BitmapSource icon = ArtworkCatalog.LoadAppIcon(directory);
+                    var packs = catalog.Characters.Select(character =>
+                        character.LoadValidated(directory, CancellationToken.None)).ToArray();
+                    return new(installation, packs, icon);
+                }
+
+                if (CharacterPack.TryOpen(directory) is { Id: LegacyPackId } pack &&
+                    pack.FindLoadableOutfit(CancellationToken.None) is not null)
+                {
+                    return new(installation, [pack], null);
+                }
+            }
+            catch (Exception error) when (CharacterPack.IsAssetError(error) || error is JsonException)
+            {
             }
         }
+        return null;
     }
 
     internal static AssetInstallation Activate(string payload, AssetReleaseManifest manifest, AssetInstallation? running,

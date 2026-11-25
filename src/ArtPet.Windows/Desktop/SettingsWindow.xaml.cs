@@ -17,17 +17,15 @@ internal partial class SettingsWindow : Window
 {
     private PetSettings _settings;
     private readonly CancellationTokenSource _updates = new();
-    private readonly CharacterPack? _startupHoolheyak;
+    private readonly AssetInstallation? _installedArtwork;
     private ReleaseUpdate? _availableUpdate;
-    private AssetReleaseUpdate? _availableAssets;
     private bool _checkingProgram;
-    private bool _checkingAssets;
     private bool _installing;
 
-    internal SettingsWindow(PetSettings settings, CharacterPack? startupHoolheyak)
+    internal SettingsWindow(PetSettings settings, AssetInstallation? installedArtwork)
     {
         _settings = settings;
-        _startupHoolheyak = startupHoolheyak;
+        _installedArtwork = installedArtwork;
         InitializeComponent();
 
         SizeOptions.ItemsSource = PetSettings.Sizes.ToArray();
@@ -207,59 +205,31 @@ internal partial class SettingsWindow : Window
     private async void CheckForAssets(object sender, RoutedEventArgs e)
     {
         CancellationToken token = _updates.Token;
-        _checkingAssets = true;
-        RefreshUpdateButtons();
-        _availableAssets = null;
-        InstallAssetButton.Visibility = Visibility.Collapsed;
-        AssetStatus.Text = "正在檢查 GitHub…";
-        try
-        {
-            AssetReleaseCheck result = await AssetReleaseUpdater.CheckAsync(_startupHoolheyak?.Installation, token);
-            token.ThrowIfCancellationRequested();
-            _availableAssets = result.Update;
-            AssetStatus.Text = result.Message;
-            InstallAssetButton.Visibility = result.Update is null ? Visibility.Collapsed : Visibility.Visible;
-            RefreshAssetVersion();
-        }
-        catch (Exception error) when (error is HttpRequestException or JsonException or OperationCanceledException or IOException or InvalidDataException)
-        {
-            if (!token.IsCancellationRequested)
-            {
-                AssetStatus.Text = "無法檢查美術資源，請稍後再試。";
-            }
-        }
-        finally
-        {
-            _checkingAssets = false;
-            RefreshUpdateButtons();
-        }
-    }
-
-    private async void InstallAssets(object sender, RoutedEventArgs e)
-    {
-        if (_availableAssets is not { } update)
-        {
-            return;
-        }
-
-        CancellationToken token = _updates.Token;
         _installing = true;
         RefreshUpdateButtons();
-        AssetStatus.Text = "正在下載並驗證美術資源…";
+        AssetStatus.Text = "正在檢查美術資源…";
         try
         {
+            AssetReleaseCheck result = await AssetReleaseUpdater.CheckAsync(_installedArtwork, token);
+            token.ThrowIfCancellationRequested();
+            if (result.Update is not { } update)
+            {
+                AssetStatus.Text = result.Message;
+                RefreshAssetVersion();
+                return;
+            }
+
+            AssetStatus.Text = "正在下載並驗證美術資源…";
             var progress = new Progress<string>(message => AssetStatus.Text = message);
-            await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _startupHoolheyak?.Installation, progress, token), token);
-            _availableAssets = null;
-            InstallAssetButton.Visibility = Visibility.Collapsed;
+            await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _installedArtwork, progress, token), token);
             RefreshAssetVersion();
-            AssetStatus.Text = "美術資源已安裝，將於下次啟動生效。";
+            AssetStatus.Text = "美術資源已更新，將於下次啟動生效。";
         }
         catch (InvalidDataException error)
         {
             AssetStatus.Text = error.Message;
         }
-        catch (Exception error) when (error is HttpRequestException or OperationCanceledException || CharacterPack.IsAssetError(error))
+        catch (Exception error) when (error is HttpRequestException or JsonException or OperationCanceledException || CharacterPack.IsAssetError(error))
         {
             if (!token.IsCancellationRequested)
             {
@@ -275,9 +245,9 @@ internal partial class SettingsWindow : Window
 
     private void RefreshAssetVersion()
     {
-        string current = _startupHoolheyak?.Installation is { } installed
+        string current = _installedArtwork is { } installed
             ? $"目前版本 {installed.Version}"
-            : _startupHoolheyak is null ? "尚未安裝" : "正在使用既有素材";
+            : "正在使用既有素材";
         AssetVersionText.Text = AssetReleaseUpdater.Pending is { } pending
             ? $"{current} · {pending.Version} 將於下次啟動生效"
             : current;
@@ -286,9 +256,8 @@ internal partial class SettingsWindow : Window
     private void RefreshUpdateButtons()
     {
         CheckUpdateButton.IsEnabled = !_installing && !_checkingProgram;
-        CheckAssetButton.IsEnabled = !_installing && !_checkingAssets;
+        CheckAssetButton.IsEnabled = !_installing;
         InstallUpdateButton.IsEnabled = !_installing;
-        InstallAssetButton.IsEnabled = !_installing;
     }
 
     private void Apply(PetSettings settings)

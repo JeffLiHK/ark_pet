@@ -21,7 +21,7 @@ internal sealed class CharacterPack
     private readonly string _directory;
     private readonly CanvasDefinition _canvas;
 
-    private CharacterPack(string directory, CharacterDefinition definition, AssetInstallation? installation)
+    private CharacterPack(string directory, CharacterDefinition definition)
     {
         _directory = directory;
         _canvas = definition.Canvas;
@@ -29,19 +29,17 @@ internal sealed class CharacterPack
         DisplayName = definition.DisplayName;
         Outfits = definition.Outfits;
         DefaultOutfit = Outfits.Single(outfit => outfit.Id == definition.DefaultOutfitId);
-        Installation = installation;
     }
 
     internal string Id { get; }
     internal string DisplayName { get; }
     internal IReadOnlyList<OutfitDefinition> Outfits { get; }
     internal OutfitDefinition DefaultOutfit { get; }
-    internal AssetInstallation? Installation { get; }
     internal IEnumerable<OutfitDefinition> StartupOutfits => Outfits.Where(outfit => outfit != DefaultOutfit).Prepend(DefaultOutfit);
 
-    internal static IEnumerable<CharacterPack> FindInstalled(Version appVersion)
+    internal static IEnumerable<CharacterPack> FindInstalled(AssetSnapshot? snapshot)
     {
-        foreach (CharacterPack pack in ManagedCharacterAssets.FindInstalled(appVersion))
+        foreach (CharacterPack pack in snapshot?.Packs ?? [])
         {
             yield return pack;
         }
@@ -83,7 +81,7 @@ internal sealed class CharacterPack
         }
     }
 
-    internal static CharacterPack? TryOpen(string directory, AssetInstallation? installation = null)
+    internal static CharacterPack? TryOpen(string directory)
     {
         try
         {
@@ -102,7 +100,7 @@ internal sealed class CharacterPack
                 return null;
             }
 
-            return new CharacterPack(directory, definition, installation);
+            return new CharacterPack(directory, definition);
         }
         catch (Exception error) when (IsAssetError(error) || error is JsonException)
         {
@@ -110,7 +108,7 @@ internal sealed class CharacterPack
         }
     }
 
-    internal void ValidateForInstall(CancellationToken token)
+    internal void ValidateArtwork(CancellationToken token)
     {
         var checkedClips = new HashSet<ClipDefinition>();
         foreach (OutfitDefinition outfit in Outfits)
@@ -140,7 +138,7 @@ internal sealed class CharacterPack
                 }
             }
 
-            foreach (string image in new[] { outfit.Preview, outfit.Portrait }.OfType<string>())
+            foreach (string image in new[] { outfit.Preview, outfit.Portrait, outfit.Icon }.OfType<string>())
             {
                 token.ThrowIfCancellationRequested();
                 DecodeThumbnail(Resolve(image), 360, 720);
@@ -222,7 +220,19 @@ internal sealed class CharacterPack
 
         FrameClip? touch = touchDefinition is null ? null : DecodeOptionalClip(touchDefinition, decodeWidth, cancellationToken);
         var anchor = new System.Windows.Point((double)_canvas.AnchorX / _canvas.Width, (double)_canvas.AnchorY / _canvas.Height);
-        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit), move, sleep);
+        BitmapSource? icon = null;
+        if (!string.IsNullOrWhiteSpace(outfit.Icon))
+        {
+            try
+            {
+                icon = DecodeThumbnail(Resolve(outfit.Icon), 256, 256);
+            }
+            catch (Exception error) when (IsAssetError(error))
+            {
+                // The desktop can derive an icon from the outfit preview.
+            }
+        }
+        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit), move, sleep, icon);
     }
 
     internal BitmapSource? LoadPortrait(OutfitDefinition outfit)
@@ -331,7 +341,7 @@ internal sealed class CharacterPack
         return DecodeBitmap(stream, decodeWidth);
     }
 
-    private static BitmapSource DecodeThumbnail(string file, int maximumWidth, int maximumHeight)
+    internal static BitmapSource DecodeThumbnail(string file, int maximumWidth, int maximumHeight)
     {
         using var stream = File.OpenRead(file);
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
@@ -379,14 +389,15 @@ internal sealed class CharacterPack
 }
 
 internal sealed record OutfitDefinition(string Id, string DisplayName, string? Preview, ClipDefinition? Idle, ClipDefinition? Touch,
-    ClipDefinition? Move, ClipDefinition? Sit, ClipDefinition? Sleep, string? Portrait = null, bool MoveFacesLeft = false);
+    ClipDefinition? Move, ClipDefinition? Sit, ClipDefinition? Sleep, string? Portrait = null, bool MoveFacesLeft = false,
+    string? Icon = null);
 
 internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount);
 
 internal sealed record FrameClip(int Fps, BitmapSource[] Frames);
 
 internal sealed record LoadedOutfit(OutfitDefinition Definition, IReadOnlyList<FrameClip> IdleClips, FrameClip? Touch,
-    System.Windows.Point Anchor, BitmapSource? Preview, FrameClip? Move = null, FrameClip? Sleep = null)
+    System.Windows.Point Anchor, BitmapSource? Preview, FrameClip? Move = null, FrameClip? Sleep = null, BitmapSource? Icon = null)
 {
     internal FrameClip Idle => IdleClips[0];
 }

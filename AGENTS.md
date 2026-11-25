@@ -18,7 +18,7 @@ For release packaging or published-build validation, use the self-contained `win
 
 ## Publish GitHub Releases
 
-Program and Hoolheyak asset releases have independent tags and update checks. Release only the channel that changed. For the first rollout, initialize the public `JeffLiHK/art_pet_assets` repository with a commit to tag. Publish the initial asset release, then publish the first program version that supports it. Set the initial asset release's minimum program version to that program version. Existing users keep their bundled or locally imported assets when upgrading. Fresh installations use Sprout until Hoolheyak is installed from Settings.
+Program and artwork releases have independent tags and update checks. Release only the channel that changed. For the first rollout, initialize the public `JeffLiHK/art_pet_assets` repository with a commit to tag. Publish the initial asset release, then publish the first program version that supports it. Set the initial asset release's minimum program version to that program version. Existing users keep their bundled or locally imported assets when upgrading. Fresh installations use the bundled Sprout until official artwork is installed from Settings.
 
 ### Program release
 
@@ -27,12 +27,12 @@ Program and Hoolheyak asset releases have independent tags and update checks. Re
 3. Create a public, stable Release in `JeffLiHK/art_pet` from the existing tag. Attach the ZIP and mark the Release as latest. With an authenticated GitHub CLI, use `gh release create <tag> <zip> --repo JeffLiHK/art_pet --verify-tag --latest --title <title> --notes-file <file>`.
 4. Query the public [program latest release endpoint](https://api.github.com/repos/JeffLiHK/art_pet/releases/latest). Verify the tag, download and GitHub asset digest against the local ZIP. Check that the previous version detects the program update and that updating preserves its installed character assets and settings.
 
-### Hoolheyak asset release
+### Artwork release
 
 1. Choose the next three-part asset version and the oldest supported three-part program version. Increase the asset version for each new package. For a character format change, release a program version that can read both the installed packs and the new schema before requiring that schema in the next asset package.
-2. On Windows, run `pwsh -File scripts/BuildHoolheyakAssetRelease.ps1 -AssetVersion <version> -MinAppVersion <program-version>` from the repository root. The script writes `ArtPet-hoolheyak-assets.zip` and `assets-manifest.json` under `artifacts/assets-v<version>/`. The ZIP contains the schema 2 `character.json`, Spine skeletons, atlases, texture PNGs, and standalone portraits. The app generates and validates the animation frames locally using the Microsoft Edge WebView2 Runtime. Keep voice imports and user settings in `local-data/`.
+2. On Windows, run `pwsh -File scripts/BuildArtworkAssetRelease.ps1 -AssetVersion <version> -MinAppVersion <program-version>` from the repository root. The script writes `ArtPet-assets.zip` and `assets-manifest.json` under `artifacts/assets-v<version>/`. The schema 3 catalog lists all official character packs and includes the application icon. Put official character additions in `local-data/release-characters/` and shared images in `local-data/release-images/`. The app uses the Microsoft Edge WebView2 Runtime to generate Spine frames locally. Keep voice imports and settings in `local-data/`.
 3. In `JeffLiHK/art_pet_assets`, create and push the matching `vX.Y.Z` tag. Attach both output files to the public, stable Release and mark it as latest. Use `gh release create <tag> <zip> <manifest> --repo JeffLiHK/art_pet_assets --verify-tag --latest --title <title> --notes-file <file>`. Keep the attachment names stable and assign a new version when replacing a published payload.
-4. Query the public [asset latest release endpoint](https://api.github.com/repos/JeffLiHK/art_pet_assets/releases/latest). Verify both downloads and SHA-256 digests. On a compatible program build, use Settings to install the package, restart and check the character and wardrobe. Confirm that an existing installation can still load its previous pack if the downloaded pack becomes unreadable, and that an incompatible build reports the requirement before downloading the ZIP.
+4. Query the public [asset latest release endpoint](https://api.github.com/repos/JeffLiHK/art_pet_assets/releases/latest). Verify both downloads and SHA-256 digests. On a compatible build, click 「檢查資源更新」 once and check that the package installs automatically. Restart and check each character, portrait, and icon. Confirm that an existing installation falls back to the previous version if the new artwork becomes unreadable. Verify that clients below the minimum version decline the download.
 
 ### GitHub Actions fallback
 

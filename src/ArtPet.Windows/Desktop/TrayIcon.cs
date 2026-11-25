@@ -16,11 +16,18 @@ internal sealed class TrayIcon : IDisposable
     private Icon? _characterImage;
 
     public TrayIcon(PetWindow pet, Action exit, Action openSettings, Action? openWardrobe,
-        Action addPet, Func<IEnumerable<TrayPet>> getPets)
+        Action addPet, Func<IEnumerable<TrayPet>> getPets, BitmapSource? appIcon)
     {
-        var iconUri = new Uri("/ArtPet.Windows;component/Media/Sprout.ico", UriKind.Relative);
-        using var imageStream = System.Windows.Application.GetResourceStream(iconUri)!.Stream;
-        _fallbackImage = new Icon(imageStream, SystemInformation.SmallIconSize);
+        if (appIcon is null)
+        {
+            var iconUri = new Uri("/ArtPet.Windows;component/Media/Sprout.ico", UriKind.Relative);
+            using var imageStream = System.Windows.Application.GetResourceStream(iconUri)!.Stream;
+            _fallbackImage = new Icon(imageStream, SystemInformation.SmallIconSize);
+        }
+        else
+        {
+            _fallbackImage = CharacterIcon.ToTrayIcon(appIcon);
+        }
 
         var visibilityItem = new ToolStripMenuItem();
         visibilityItem.Click += (_, _) =>
