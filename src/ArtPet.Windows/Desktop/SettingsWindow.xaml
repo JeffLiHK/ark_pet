@@ -249,6 +249,9 @@
                             <TextBlock Text="在目前螢幕散步，偶爾發呆或睡覺。" Style="{StaticResource Hint}" />
                         </StackPanel>
                     </DockPanel>
+                    <CheckBox x:Name="PhysicsModeCheckBox" Content="物理模式"
+                              Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" />
+                    <TextBlock Text="放開小人後，會落到視窗、工作列或螢幕底部。" Style="{StaticResource Hint}" />
                     <CheckBox x:Name="StartupCheckBox" Content="登入 Windows 時啟動 Art Pet"
                               Foreground="{StaticResource TextBrush}" Margin="0,14,0,0" Click="ChangeStartup" />
                     <TextBlock x:Name="StartupStatus" Style="{StaticResource Hint}" Visibility="Collapsed" />

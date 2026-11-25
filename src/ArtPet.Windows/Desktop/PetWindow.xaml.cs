@@ -71,7 +71,8 @@ public partial class PetWindow : Window
         bool languageChanged = Settings.VoiceLanguage != settings.VoiceLanguage ||
             Settings.SubtitleLanguage != settings.SubtitleLanguage;
         bool effectsChanged = Settings.OutlineLevel != settings.OutlineLevel || Settings.ShadowLevel != settings.ShadowLevel;
-        bool freeModeChanged = Settings.FreeModeEnabled != settings.FreeModeEnabled;
+        bool physicsModeChanged = Settings.PhysicsModeEnabled != settings.PhysicsModeEnabled;
+        bool movementModesChanged = Settings.FreeModeEnabled != settings.FreeModeEnabled || physicsModeChanged;
         Settings = settings;
         if (interactionChanged)
         {
@@ -93,9 +94,15 @@ public partial class PetWindow : Window
         _player.IdleLoopsPerAction = settings.IdleLoopsPerAction;
         PetArt.FramesPerSecond = settings.AnimationFps;
         ResizePet(DefaultSizeDip * settings.SizePercent / PetSettings.DefaultSize);
-        if (freeModeChanged)
+        if (physicsModeChanged)
         {
-            _player.SetFreeMode(settings.FreeModeEnabled);
+            ResetPhysicsPosition();
+        }
+
+        if (movementModesChanged)
+        {
+            PauseRoaming();
+            _player.SetMovementModes(settings.FreeModeEnabled, settings.PhysicsModeEnabled);
             RefreshRoaming();
         }
     }
@@ -159,11 +166,21 @@ public partial class PetWindow : Window
     internal void SetOutfit(LoadedOutfit outfit)
     {
         PauseRoaming();
+        bool wasSupported = _support is not null;
+        double previousBottom = _artworkBounds.Bottom;
+        ResetPhysicsPosition();
         _voice.Stop();
         _scaleAnchor = outfit.Anchor;
         Rect artwork = ArtworkBounds.FromFrame(outfit.Idle.Frames[0]);
         // An idle clip can start with a blank frame.
         _artworkBounds = artwork.IsEmpty ? new Rect(0, 0, 1, 1) : artwork;
+        if (wasSupported && NativeMethods.GetWindowRect(_handle, out WindowBounds bounds))
+        {
+            double padding = _effectPadding * NativeMethods.GetDpiForWindow(_handle) / 96.0;
+            int offset = (int)Math.Round((previousBottom - _artworkBounds.Bottom) * (bounds.Height - 2 * padding));
+            MovePet(bounds, bounds.Left, bounds.Top + offset);
+        }
+
         PetArt.Stop();
         PetArt.Visibility = Visibility.Collapsed;
         _player.SetOutfit(outfit, IsVisible);
@@ -209,6 +226,7 @@ public partial class PetWindow : Window
         if (resetPosition)
         {
             _atPrimaryCorner = true;
+            ResetPhysicsPosition();
         }
 
         RecoverPlacement();
@@ -389,7 +407,8 @@ public partial class PetWindow : Window
             double paddingChange = (oldPadding - padding) * NativeMethods.GetDpiForWindow(_handle) / 96.0;
             double anchorX = FacingTransform.ScaleX < 0 ? 1 - _scaleAnchor.X : _scaleAnchor.X;
             int x = previous.Left + (int)Math.Round(paddingChange + (previous.Width - resized.Width - 2 * paddingChange) * anchorX);
-            int y = previous.Top + (int)Math.Round(paddingChange + (previous.Height - resized.Height - 2 * paddingChange) * _scaleAnchor.Y);
+            double anchorY = Settings.PhysicsModeEnabled ? _artworkBounds.Bottom : _scaleAnchor.Y;
+            int y = previous.Top + (int)Math.Round(paddingChange + (previous.Height - resized.Height - 2 * paddingChange) * anchorY);
             MovePet(resized, x, y);
         }
 
@@ -493,8 +512,16 @@ public partial class PetWindow : Window
 
     private void UpdateDrag(Press press, Point cursor)
     {
-        _dragging |= Math.Abs(cursor.X - press.Start.X) >= press.DragWidth ||
-            Math.Abs(cursor.Y - press.Start.Y) >= press.DragHeight;
+        if (!_dragging && (Math.Abs(cursor.X - press.Start.X) >= press.DragWidth ||
+            Math.Abs(cursor.Y - press.Start.Y) >= press.DragHeight))
+        {
+            _dragging = true;
+            ResetPhysicsPosition();
+            if (Settings.PhysicsModeEnabled)
+            {
+                SetRestingAction(RoamingAction.Idle);
+            }
+        }
 
         if (_dragging && cursor != press.LastCursor && NativeMethods.GetWindowRect(_handle, out WindowBounds bounds))
         {

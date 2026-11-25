@@ -37,6 +37,7 @@ internal partial class SettingsWindow : Window
         IdleLoopsInput.Text = settings.IdleLoopsPerAction.ToString(CultureInfo.InvariantCulture);
         InteractionModeCheckBox.IsChecked = settings.InteractionEnabled;
         FreeModeCheckBox.IsChecked = settings.FreeModeEnabled;
+        PhysicsModeCheckBox.IsChecked = settings.PhysicsModeEnabled;
         WalkingSpeedOptions.ItemsSource = PetSettings.WalkingSpeeds.ToArray();
         WalkingSpeedOptions.SelectedItem = settings.WalkingSpeedPercent;
         VoiceOptions.SelectedValue = settings.VoiceLanguage;
@@ -55,6 +56,7 @@ internal partial class SettingsWindow : Window
         FrameRateOptions.SelectionChanged += ApplySelections;
         InteractionModeCheckBox.Click += ApplySelections;
         FreeModeCheckBox.Click += ApplySelections;
+        PhysicsModeCheckBox.Click += ApplySelections;
         WalkingSpeedOptions.SelectionChanged += ApplySelections;
         VoiceOptions.SelectionChanged += ApplySelections;
         SubtitleOptions.SelectionChanged += ApplySelections;
@@ -79,6 +81,7 @@ internal partial class SettingsWindow : Window
                 AnimationFps = frameRate,
                 InteractionEnabled = InteractionModeCheckBox.IsChecked == true,
                 FreeModeEnabled = FreeModeCheckBox.IsChecked == true,
+                PhysicsModeEnabled = PhysicsModeCheckBox.IsChecked == true,
                 WalkingSpeedPercent = walkingSpeed,
                 OutlineLevel = OutlineOptions.SelectedIndex,
                 ShadowLevel = ShadowOptions.SelectedIndex,

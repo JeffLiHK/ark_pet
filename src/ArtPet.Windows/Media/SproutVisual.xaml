@@ -4,7 +4,7 @@
              Focusable="False" Cursor="Hand">
     <Viewbox Stretch="Uniform">
         <Canvas Width="160" Height="160">
-            <Canvas x:Name="Sprout" Width="160" Height="160" RenderTransformOrigin="0.5,0.91">
+            <Canvas x:Name="Sprout" Width="160" Height="160" RenderTransformOrigin="0.5,0.9375">
                 <Canvas.RenderTransform>
                     <TransformGroup>
                         <ScaleTransform x:Name="Breath" />

@@ -19,7 +19,7 @@ public partial class PetWindow
 
     private void RefreshRoaming()
     {
-        if (Settings.FreeModeEnabled && IsVisible && _player.CanWalk)
+        if (IsVisible && (Settings.PhysicsModeEnabled || (Settings.FreeModeEnabled && _player.CanWalk)))
         {
             if (!_roaming)
             {
@@ -42,6 +42,7 @@ public partial class PetWindow
             CompositionTarget.Rendering -= UpdateRoaming;
             _roaming = false;
             _lastRoamingFrame = null;
+            ResetPhysicsPosition();
         }
     }
 
@@ -49,9 +50,15 @@ public partial class PetWindow
     {
         _walk = null;
         bool sleep = allowSleep && _player.CanSleep && Random.Shared.Next(4) == 0;
-        _player.SetRoamingAction(sleep ? RoamingAction.Sleep : RoamingAction.Idle);
+        SetRestingAction(sleep && !Settings.PhysicsModeEnabled ? RoamingAction.Sleep : GetPhysicsAction());
         int seconds = sleep ? Random.Shared.Next(8, 17) : Random.Shared.Next(2, 6);
         _restUntil = Stopwatch.GetTimestamp() + Stopwatch.Frequency * seconds;
+    }
+
+    private void SetRestingAction(RoamingAction action)
+    {
+        _player.SetRoamingAction(action);
+        PetArt.SetRestingAction(action);
     }
 
     private void UpdateRoaming(object? sender, EventArgs e)
@@ -68,10 +75,29 @@ public partial class PetWindow
             : 0;
         _lastRoamingFrame = (frame.RenderingTime, now);
 
+        if (Settings.PhysicsModeEnabled && _press is null && !ContextMenu.IsOpen && !_voice.IsPlaying)
+        {
+            bool wasSupported = _support is not null;
+            UpdatePhysics(elapsed, now);
+            if ((_support is null && _walk is not null) || (!wasSupported && _support is not null))
+            {
+                PauseRoaming();
+            }
+            else if (_walk is null)
+            {
+                SetRestingAction(GetPhysicsAction());
+            }
+        }
+
+        if (!Settings.FreeModeEnabled || !_player.CanWalk || (Settings.PhysicsModeEnabled && _support is null))
+        {
+            return;
+        }
+
         if (!SystemParameters.ClientAreaAnimation || _press is not null || IsMouseOver ||
             ContextMenu.IsOpen || _player.IsReacting || _voice.IsPlaying)
         {
-            if (_walk is not null || _player.IsSleeping)
+            if (_walk is not null || (!Settings.PhysicsModeEnabled && _player.IsSleeping))
             {
                 PauseRoaming();
             }
@@ -91,9 +117,20 @@ public partial class PetWindow
 
         walk.Distance += elapsed * GetWalkingSpeed(walk.DpiScale);
         double progress = Math.Min(1, walk.Distance / walk.Length);
+        int top = walk.Start.Y + (int)Math.Round(((double)walk.End.Y - walk.Start.Y) * progress);
+        if (Settings.PhysicsModeEnabled)
+        {
+            if (_lastPhysicsTop is not { } physicsTop)
+            {
+                PauseRoaming();
+                return;
+            }
+
+            top = physicsTop;
+        }
+
         var position = new Point(
-            walk.Start.X + (int)Math.Round(((double)walk.End.X - walk.Start.X) * progress),
-            walk.Start.Y + (int)Math.Round(((double)walk.End.Y - walk.Start.Y) * progress));
+            walk.Start.X + (int)Math.Round(((double)walk.End.X - walk.Start.X) * progress), top);
         if (position != walk.LastPosition)
         {
             if (!NativeMethods.MoveWindow(_handle, position.X, position.Y, deferErase: true))
@@ -138,14 +175,16 @@ public partial class PetWindow
         double speed = GetWalkingSpeed(dpiScale);
         int distance = (int)Math.Round(speed * (3 + Random.Shared.NextDouble() * 3));
         int startX = Math.Clamp(bounds.Left, work.Left, right);
-        int startY = Math.Clamp(bounds.Top, work.Top, bottom);
+        int startY = Settings.PhysicsModeEnabled ? bounds.Top : Math.Clamp(bounds.Top, work.Top, bottom);
         int endX = Math.Clamp(startX + direction * distance, work.Left, right);
         if (endX == startX)
         {
             endX = Math.Clamp(startX - direction * distance, work.Left, right);
         }
 
-        int endY = Math.Clamp(startY + (int)Math.Round((Random.Shared.NextDouble() - 0.5) * distance), work.Top, bottom);
+        int endY = Settings.PhysicsModeEnabled
+            ? startY
+            : Math.Clamp(startY + (int)Math.Round((Random.Shared.NextDouble() - 0.5) * distance), work.Top, bottom);
         double dx = (double)endX - bounds.Left;
         double dy = (double)endY - bounds.Top;
         double length = Math.Sqrt(dx * dx + dy * dy);
