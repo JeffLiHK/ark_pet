@@ -2,12 +2,14 @@ using System;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Security;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using ArtPet.Windows.Media;
 
@@ -18,14 +20,16 @@ internal partial class SettingsWindow : Window
     private PetSettings _settings;
     private readonly CancellationTokenSource _updates = new();
     private readonly AssetInstallation? _installedArtwork;
+    private readonly Action _stopVoice;
     private ReleaseUpdate? _availableUpdate;
     private bool _checkingProgram;
     private bool _installing;
 
-    internal SettingsWindow(PetSettings settings, AssetInstallation? installedArtwork)
+    internal SettingsWindow(PetSettings settings, AssetSnapshot? artwork, Action stopVoice)
     {
         _settings = settings;
-        _installedArtwork = installedArtwork;
+        _installedArtwork = artwork?.Installation;
+        _stopVoice = stopVoice;
         InitializeComponent();
 
         SizeOptions.ItemsSource = PetSettings.Sizes.ToArray();
@@ -49,6 +53,17 @@ internal partial class SettingsWindow : Window
         ReadStartup();
         CurrentVersionText.Text = $"程式 {ReleaseUpdater.CurrentVersion.ToString(3)}";
         RefreshAssetVersion();
+        SetModelChoices(artwork);
+        RefreshResourceControls();
+        Activated += (_, _) => RefreshResourceControls();
+        if (AssetReleaseUpdater.Pending is not null)
+        {
+            Loaded += async (_, _) =>
+            {
+                CancellationToken token = _updates.Token;
+                await LoadInstalledModelsAsync(token);
+            };
+        }
 
         SizeOptions.SelectionChanged += ApplySelections;
         FrameRateOptions.SelectionChanged += ApplySelections;
@@ -225,8 +240,13 @@ internal partial class SettingsWindow : Window
             AssetStatus.Text = "正在下載並驗證資源…";
             var progress = new Progress<string>(message => AssetStatus.Text = message);
             await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _installedArtwork, progress, token), token);
+            await LoadInstalledModelsAsync(token);
             RefreshAssetVersion();
-            AssetStatus.Text = "資源已更新，將於下次啟動生效。";
+            AssetStatus.Text = "全部模型已下載。可在這裡建置，衣櫃將於下次啟動更新。";
+            if (update.Manifest.HasSplitResources && !VoiceLibrary.HasChoice(PetSettings.Japanese))
+            {
+                VoicePackStatus.Text = "日語配音尚未安裝，可在此重試下載。";
+            }
         }
         catch (InvalidDataException error)
         {
@@ -243,7 +263,136 @@ internal partial class SettingsWindow : Window
         {
             _installing = false;
             RefreshUpdateButtons();
+            RefreshResourceControls();
         }
+    }
+
+    private void SetModelChoices(AssetSnapshot? artwork)
+    {
+        ModelOptions.ItemsSource = artwork?.Packs.SelectMany(pack => pack.Models?.Models ?? []).ToArray() ?? [];
+        ModelOptions.SelectedIndex = ModelOptions.Items.Count > 0 ? 0 : -1;
+    }
+
+    private async Task LoadInstalledModelsAsync(CancellationToken token)
+    {
+        try
+        {
+            AssetSnapshot? installed = await Task.Run(() => ManagedCharacterAssets.LoadInstalled(ReleaseUpdater.CurrentVersion), token);
+            if (!token.IsCancellationRequested)
+            {
+                SetModelChoices(installed);
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void ModelSelectionChanged(object sender, SelectionChangedEventArgs e) => RefreshResourceControls();
+
+    private async void BuildModel(object sender, RoutedEventArgs e) => await ManageModelAsync(remove: false);
+    private async void DeleteModel(object sender, RoutedEventArgs e) => await ManageModelAsync(remove: true);
+
+    private async Task ManageModelAsync(bool remove)
+    {
+        if (_installing || ModelOptions.SelectedItem is not SpineModelChoice model)
+        {
+            return;
+        }
+        CancellationToken token = _updates.Token;
+        _installing = true;
+        RefreshUpdateButtons();
+        RefreshResourceControls();
+        ModelStatus.Text = remove ? "正在刪除影格…" : "正在建置動畫影格…";
+        try
+        {
+            await Task.Run(() => remove ? model.Library.DeleteAsync(model.Id, token) : model.Library.BuildAsync(model.Id, token), token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception error) when (CharacterPack.IsAssetError(error))
+        {
+            ModelStatus.Text = error is InvalidDataException ? error.Message : "無法變更模型影格，請檢查資料夾寫入權限。";
+            return;
+        }
+        finally
+        {
+            _installing = false;
+            RefreshUpdateButtons();
+            RefreshResourceControls(refreshModelStatus: false);
+        }
+        RefreshResourceControls();
+    }
+
+    private async void DownloadVoice(object sender, RoutedEventArgs e) => await ManageVoiceAsync(sender, remove: false);
+    private async void DeleteVoice(object sender, RoutedEventArgs e) => await ManageVoiceAsync(sender, remove: true);
+
+    private async Task ManageVoiceAsync(object sender, bool remove)
+    {
+        if (_installing || sender is not Button { Tag: string language } || !VoiceAssets.IsAudioLanguage(language))
+        {
+            return;
+        }
+        CancellationToken token = _updates.Token;
+        _installing = true;
+        RefreshUpdateButtons();
+        RefreshResourceControls();
+        VoicePackStatus.Text = remove ? "正在刪除配音…" : "正在下載並驗證配音…";
+        try
+        {
+            if (remove)
+            {
+                _stopVoice();
+                await Task.Run(() => AssetReleaseUpdater.DeleteVoiceAsync(language, token), token);
+                VoicePackStatus.Text = "已刪除下載的配音。";
+            }
+            else
+            {
+                Version version = await Task.Run(() => AssetReleaseUpdater.DownloadVoiceAsync(language, token), token);
+                VoicePackStatus.Text = $"配音 {version} 已可使用。";
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+        }
+        catch (Exception error) when (error is HttpRequestException or JsonException or OperationCanceledException || CharacterPack.IsAssetError(error))
+        {
+            VoicePackStatus.Text = error is InvalidDataException ? error.Message : "無法變更配音，請檢查網路或資料夾權限後再試。";
+        }
+        finally
+        {
+            _installing = false;
+            RefreshUpdateButtons();
+            RefreshResourceControls();
+        }
+    }
+
+    private void RefreshResourceControls(bool refreshModelStatus = true)
+    {
+        if (ModelStatus is null || ModelOptions is null || JapaneseVoiceStatus is null)
+        {
+            return;
+        }
+        var model = ModelOptions.SelectedItem as SpineModelChoice;
+        bool built = model?.Library.IsBuilt(model.Id) == true;
+        ModelOptions.IsEnabled = !_installing && ModelOptions.Items.Count > 0;
+        BuildModelButton.IsEnabled = !_installing && model is not null && !built;
+        DeleteModelButton.IsEnabled = !_installing && built;
+        if (refreshModelStatus && !_installing)
+        {
+            ModelStatus.Text = model is null ? "目前沒有可建置的模型。" : built ? "影格已建置" : "尚未建置";
+        }
+        RefreshVoiceStatus(PetSettings.Japanese, JapaneseVoiceStatus, DownloadJapaneseButton, DeleteJapaneseButton);
+        RefreshVoiceStatus(PetSettings.Mandarin, MandarinVoiceStatus, DownloadMandarinButton, DeleteMandarinButton);
+    }
+
+    private void RefreshVoiceStatus(string language, TextBlock status, Button download, Button delete)
+    {
+        AssetInstallation? installed = VoiceLibrary.GetInstalled(language);
+        status.Text = installed is null ? "未下載獨立配音包" : $"已安裝 {installed.Version}";
+        download.IsEnabled = !_installing;
+        delete.IsEnabled = !_installing && installed is not null;
     }
 
     private void RefreshAssetVersion()

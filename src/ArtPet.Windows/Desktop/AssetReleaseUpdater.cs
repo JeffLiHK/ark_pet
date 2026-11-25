@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -9,7 +10,7 @@ using ArtPet.Windows.Media;
 
 namespace ArtPet.Windows.Desktop;
 
-internal sealed record AssetReleaseUpdate(AssetReleaseManifest Manifest, ReleasePackage Package);
+internal sealed record AssetReleaseUpdate(AssetReleaseManifest Manifest, ReleasePackage Package, ReleasePackage? DefaultVoice = null);
 internal sealed record AssetReleaseCheck(AssetReleaseUpdate? Update, string Message);
 
 internal static class AssetReleaseUpdater
@@ -80,7 +81,9 @@ internal static class AssetReleaseUpdater
             return new(null, "GitHub 尚未提供可驗證的資源包。");
         }
 
-        return new(new(manifest, package), $"找到資源 {version}。");
+        ReleasePackage? defaultVoice = manifest.HasSplitResources && !VoiceLibrary.HasChoice(PetSettings.Japanese)
+            ? FindVoicePackage(release, PetSettings.Japanese) : null;
+        return new(new(manifest, package, defaultVoice), $"找到資源 {version}。");
     }
 
     internal static async Task InstallAsync(AssetReleaseUpdate update, AssetInstallation? running,
@@ -107,7 +110,7 @@ internal static class AssetReleaseUpdater
             ExtractPackage(archive, payload, update.Manifest.SchemaVersion, token);
             if (update.Manifest.IsCatalog)
             {
-                await PrepareCatalogAsync(payload, update.Manifest.HasVoiceAssets, progress, token);
+                await PrepareCatalogAsync(payload, update.Manifest, progress, token);
             }
             else
             {
@@ -125,6 +128,19 @@ internal static class AssetReleaseUpdater
                 pack.ValidateArtwork(token);
             }
 
+            if (update.DefaultVoice is { } voice && !VoiceLibrary.HasChoice(PetSettings.Japanese))
+            {
+                progress.Report("正在下載日語配音…");
+                try
+                {
+                    await InstallVoicePackageAsync(PetSettings.Japanese, update.Manifest.AssetVersion, voice, token);
+                }
+                catch (Exception error) when (!token.IsCancellationRequested &&
+                    (error is HttpRequestException or OperationCanceledException || CharacterPack.IsAssetError(error)))
+                {
+                    progress.Report("日語配音下載失敗，可在語音資源重試。");
+                }
+            }
             AssetInstallation installed = ManagedCharacterAssets.Activate(payload, update.Manifest, running, pending, token);
             Volatile.Write(ref _pending, installed);
         }
@@ -135,7 +151,85 @@ internal static class AssetReleaseUpdater
         }
     }
 
-    private static async Task PrepareCatalogAsync(string payload, bool hasVoiceAssets, IProgress<string> progress,
+    internal static async Task<Version> DownloadVoiceAsync(string language, CancellationToken token)
+    {
+        await InstallGate.WaitAsync(token);
+        try
+        {
+            GitHubRelease? release = await GitHubReleaseSource.GetLatestAsync(Repository, token);
+            if (release is null || release.Tag is not { Length: > 1 } tag || tag[0] != 'v' ||
+                !Version.TryParse(tag[1..], out Version? version) || !AssetReleaseManifest.IsReleaseVersion(version) ||
+                GitHubReleaseSource.FindPackage(Repository, release, ManagedCharacterAssets.ManifestName) is not { Size: <= 16 * 1024 } metadata ||
+                FindVoicePackage(release, language) is not { } package)
+            {
+                throw new InvalidDataException("GitHub 尚未提供可驗證的獨立配音包。");
+            }
+
+            using var contents = new MemoryStream();
+            await GitHubReleaseSource.DownloadAsync(metadata, contents, token);
+            contents.Position = 0;
+            var manifest = await JsonSerializer.DeserializeAsync<AssetReleaseManifest>(contents, ManagedCharacterAssets.JsonOptions, token);
+            if (manifest is not { IsValid: true, HasSplitResources: true } || manifest.AssetVersion != version ||
+                !manifest.Supports(ReleaseUpdater.CurrentVersion))
+            {
+                throw new InvalidDataException("目前的程式無法讀取這個配音版本。");
+            }
+            if (VoiceLibrary.GetInstalled(language) is { } installed && installed.Version > version)
+            {
+                return installed.Version;
+            }
+            await InstallVoicePackageAsync(language, version, package, token);
+            return version;
+        }
+        finally
+        {
+            InstallGate.Release();
+        }
+    }
+
+    internal static async Task DeleteVoiceAsync(string language, CancellationToken token)
+    {
+        await InstallGate.WaitAsync(token);
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            VoiceLibrary.Remove(language);
+        }
+        finally
+        {
+            InstallGate.Release();
+        }
+    }
+
+    private static ReleasePackage? FindVoicePackage(GitHubRelease release, string language) =>
+        VoiceAssets.IsAudioLanguage(language) &&
+        GitHubReleaseSource.FindPackage(Repository, release, $"ArtPet-voice-{language}.zip") is { Size: <= MaximumArchiveSize } package
+            ? package : null;
+
+    private static async Task InstallVoicePackageAsync(string language, Version version, ReleasePackage package, CancellationToken token)
+    {
+        string staging = Path.Combine(ManagedCharacterAssets.RootDirectory, $".voice-stage-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(staging);
+        try
+        {
+            string archive = Path.Combine(staging, "voice.zip");
+            await using (FileStream file = File.Create(archive))
+            {
+                await GitHubReleaseSource.DownloadAsync(package, file, token);
+            }
+            string payload = Path.Combine(staging, "payload");
+            ExtractPackage(archive, payload, ArtworkCatalog.SplitResourceSchemaVersion, token, language);
+            VoiceAssets.Validate(payload, null, token, audioLanguage: language);
+            token.ThrowIfCancellationRequested();
+            VoiceLibrary.Activate(language, version, payload);
+        }
+        finally
+        {
+            ManagedCharacterAssets.TryDeleteDirectory(staging);
+        }
+    }
+
+    private static async Task PrepareCatalogAsync(string payload, AssetReleaseManifest manifest, IProgress<string> progress,
         CancellationToken token)
     {
         ArtworkCatalog catalog;
@@ -149,15 +243,20 @@ internal static class AssetReleaseUpdater
         }
 
         ArtworkCatalog.LoadAppIcon(payload);
-        if (hasVoiceAssets)
+        if (manifest.HasVoiceAssets || manifest.HasSplitResources)
         {
-            VoiceAssets.Validate(payload, catalog, token);
+            VoiceAssets.Validate(payload, catalog, token, subtitlesOnly: manifest.HasSplitResources);
         }
         for (int index = 0; index < catalog.Characters.Length; index++)
         {
             token.ThrowIfCancellationRequested();
             ArtworkCharacter character = catalog.Characters[index];
             progress.Report($"正在準備角色資源（{index + 1}/{catalog.Characters.Length}）…");
+            if (manifest.HasSplitResources)
+            {
+                character.OpenSource(payload, token);
+                continue;
+            }
             if (character.HasSpineSource)
             {
                 await SpineFrameCache.GenerateAsync(character.SourceDirectory(payload), character.PlaybackDirectory(payload),
@@ -170,9 +269,10 @@ internal static class AssetReleaseUpdater
     private static bool IsAllowedAsset(string path, int schemaVersion)
     {
         string extension = Path.GetExtension(path).ToLowerInvariant();
-        if (schemaVersion is ArtworkCatalog.SchemaVersion or ArtworkCatalog.VoiceSchemaVersion)
+        if (schemaVersion is ArtworkCatalog.SchemaVersion or ArtworkCatalog.VoiceSchemaVersion or ArtworkCatalog.SplitResourceSchemaVersion)
         {
-            if (schemaVersion == ArtworkCatalog.VoiceSchemaVersion && VoiceAssets.IsPackageFile(path))
+            if (schemaVersion != ArtworkCatalog.SchemaVersion &&
+                VoiceAssets.IsPackageFile(path, subtitlesOnly: schemaVersion == ArtworkCatalog.SplitResourceSchemaVersion))
             {
                 return true;
             }
@@ -192,7 +292,8 @@ internal static class AssetReleaseUpdater
             schemaVersion == SpineFrameCache.SchemaVersion && extension is (".atlas" or ".skel");
     }
 
-    private static void ExtractPackage(string archive, string payload, int schemaVersion, CancellationToken token)
+    private static void ExtractPackage(string archive, string payload, int schemaVersion, CancellationToken token,
+        string? voiceLanguage = null)
     {
         using ZipArchive zip = ZipFile.OpenRead(archive);
         if (zip.Entries.Count > MaximumEntries)
@@ -224,7 +325,7 @@ internal static class AssetReleaseUpdater
             string destination = Path.GetFullPath(path, payload);
             remaining -= entry.Length;
             if (!destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
-                !IsAllowedAsset(path, schemaVersion) ||
+                !(voiceLanguage is null ? IsAllowedAsset(path, schemaVersion) : VoiceAssets.IsPackageFile(path, audioLanguage: voiceLanguage)) ||
                 (schemaVersion == SpineFrameCache.SchemaVersion && entry.Length > SpineFrameCache.MaximumSourceFileSize) ||
                 remaining < 0)
             {

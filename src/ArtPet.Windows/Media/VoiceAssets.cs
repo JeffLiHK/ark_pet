@@ -14,8 +14,9 @@ internal static class VoiceAssets
     internal const string SubtitleFileName = "subtitles.json";
 
     internal static bool IsLineId(string id) => Regex.IsMatch(id, @"\Acn_[0-9]{3}\z");
+    internal static bool IsAudioLanguage(string language) => language is PetSettings.Japanese or PetSettings.Mandarin;
 
-    internal static bool IsPackageFile(string path)
+    internal static bool IsPackageFile(string path, string? audioLanguage = null, bool subtitlesOnly = false)
     {
         string[] parts = path.Split(Path.DirectorySeparatorChar);
         if (parts.Length != 4 || parts[0] != DirectoryName || !SpineFrameCache.IsIdentifier(parts[1]))
@@ -26,27 +27,28 @@ internal static class VoiceAssets
         string language = parts[2];
         string file = parts[3];
         return file == SubtitleFileName
-            ? language is PetSettings.Japanese or PetSettings.TraditionalChinese
-            : language is (PetSettings.Japanese or PetSettings.Mandarin) &&
+            ? audioLanguage is null && language is (PetSettings.Japanese or PetSettings.TraditionalChinese)
+            : !subtitlesOnly && (audioLanguage is null || audioLanguage == language) && IsAudioLanguage(language) &&
                 file.EndsWith(".mp3", StringComparison.Ordinal) && IsLineId(Path.GetFileNameWithoutExtension(file));
     }
 
-    internal static void Validate(string root, ArtworkCatalog catalog, CancellationToken token)
+    internal static void Validate(string root, ArtworkCatalog? catalog, CancellationToken token, string? audioLanguage = null,
+        bool subtitlesOnly = false)
     {
-        var characters = catalog.Characters.Select(character => character.Id).ToHashSet(StringComparer.Ordinal);
+        var characters = catalog?.Characters.Select(character => character.Id).ToHashSet(StringComparer.Ordinal);
         var audio = new HashSet<(string Character, string Language)>();
         var subtitles = new HashSet<(string Character, string Language)>();
         foreach (string file in Directory.EnumerateFiles(Path.Combine(root, DirectoryName), "*", SearchOption.AllDirectories))
         {
             token.ThrowIfCancellationRequested();
             string relative = Path.GetRelativePath(root, file);
-            if (!IsPackageFile(relative))
+            if (!IsPackageFile(relative, audioLanguage, subtitlesOnly))
             {
                 throw new InvalidDataException("語音資源包含無效的檔案路徑。");
             }
 
             string[] parts = relative.Split(Path.DirectorySeparatorChar);
-            if (!characters.Contains(parts[1]))
+            if (characters is not null && !characters.Contains(parts[1]))
             {
                 throw new InvalidDataException("語音資源包含角色清單以外的角色。");
             }
@@ -84,7 +86,15 @@ internal static class VoiceAssets
         }
 
         const string hoolheyak = ManagedCharacterAssets.LegacyPackId;
-        if (!audio.Contains((hoolheyak, PetSettings.Japanese)) || !audio.Contains((hoolheyak, PetSettings.Mandarin)) ||
+        if (audioLanguage is { } language)
+        {
+            if (!audio.Contains((hoolheyak, language)))
+            {
+                throw new InvalidDataException("配音包缺少霍爾海雅的配音。");
+            }
+            return;
+        }
+        if ((!subtitlesOnly && (!audio.Contains((hoolheyak, PetSettings.Japanese)) || !audio.Contains((hoolheyak, PetSettings.Mandarin)))) ||
             !subtitles.Contains((hoolheyak, PetSettings.Japanese)) || !subtitles.Contains((hoolheyak, PetSettings.TraditionalChinese)))
         {
             throw new InvalidDataException("資源包缺少霍爾海雅的日語、普通話配音或字幕。");

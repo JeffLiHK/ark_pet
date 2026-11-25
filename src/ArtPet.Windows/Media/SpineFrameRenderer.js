@@ -33,6 +33,8 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
             const skeleton = new spine.Skeleton(data);
             const clips = {};
             const counts = {};
+            const modelBounds = { left: 0, right: 0, top: 0, bottom: 0 };
+            let total = 0;
             for (const [key, name] of Object.entries(animations)) {
                 const animation = data.findAnimation(name);
                 if (!animation) {
@@ -40,18 +42,23 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
                 }
                 clips[key] = animation;
                 const count = Math.ceil(animation.duration * fps - 0.0001);
-                if (count < 1 || count > 4096) throw new Error(`Invalid duration for ${id}/${name}`);
+                total += count;
+                if (count < 1 || total > 4096) throw new Error(`Invalid duration for ${id}/${name}`);
                 counts[key] = count;
                 for (let index = 0; index < count; index++) {
                     pose(skeleton, animation, index);
                     skeleton.getBounds(offset, extent, vertices);
                     if (!Number.isFinite(offset.x + offset.y + extent.x + extent.y)) continue;
-                    bounds.left = Math.min(bounds.left, offset.x);
-                    bounds.right = Math.max(bounds.right, offset.x + extent.x);
-                    bounds.bottom = Math.min(bounds.bottom, offset.y);
-                    bounds.top = Math.max(bounds.top, offset.y + extent.y);
+                    modelBounds.left = Math.min(modelBounds.left, offset.x);
+                    modelBounds.right = Math.max(modelBounds.right, offset.x + extent.x);
+                    modelBounds.bottom = Math.min(modelBounds.bottom, offset.y);
+                    modelBounds.top = Math.max(modelBounds.top, offset.y + extent.y);
                 }
             }
+            bounds.left = Math.min(bounds.left, modelBounds.left);
+            bounds.right = Math.max(bounds.right, modelBounds.right);
+            bounds.bottom = Math.min(bounds.bottom, modelBounds.bottom);
+            bounds.top = Math.max(bounds.top, modelBounds.top);
             models.set(id, { skeleton, clips });
             return counts;
         },

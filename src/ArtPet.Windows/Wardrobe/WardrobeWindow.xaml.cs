@@ -136,7 +136,7 @@ internal partial class WardrobeWindow : Window
     {
         foreach (CharacterPack pack in candidates)
         {
-            if (pack.FindLoadableOutfit(token) is not null)
+            if (pack.Models is not null || pack.FindLoadableOutfit(token) is not null)
             {
                 var character = new CharacterChoice(pack);
                 character.SetImages(LoadCharacterPortrait(pack, token));
@@ -239,7 +239,19 @@ internal partial class WardrobeWindow : Window
     {
         if (sender is Button { DataContext: OutfitChoice choice })
         {
+            CancellationToken token = _loading.Token;
             await _session.SelectAsync(choice.Pack, choice.Outfit);
+            try
+            {
+                BitmapSource? image = await Task.Run(() => LoadChibi(choice.Pack, choice.Outfit), token);
+                if (!token.IsCancellationRequested)
+                {
+                    choice.SetImages(choice.Portrait, image);
+                }
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+            }
         }
     }
 
@@ -299,8 +311,9 @@ internal partial class WardrobeWindow : Window
         {
             IsCurrent = session.Pack == Pack && session.Outfit?.Definition == Outfit;
             HasError = session.HasLoadError(Pack, Outfit);
-            Status = IsCurrent ? "使用中" : session.PendingSelection == (Pack, Outfit) ? "套用中…" :
-                HasError ? "素材無法讀取" : string.Empty;
+            bool ready = Pack.IsOutfitReady(Outfit);
+            Status = session.PendingSelection == (Pack, Outfit) ? ready ? "套用中…" : "正在建置模型…" :
+                HasError ? "素材無法讀取" : IsCurrent ? "使用中" : ready ? string.Empty : "尚未建置";
             NotifyChanged();
         }
     }

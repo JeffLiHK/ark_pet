@@ -11,6 +11,7 @@ internal sealed record ArtworkCatalog(ArtworkCharacter[] Characters)
 {
     internal const int SchemaVersion = 3;
     internal const int VoiceSchemaVersion = 4;
+    internal const int SplitResourceSchemaVersion = 5;
     internal const string PackId = "artpet";
     internal const string CatalogName = "catalog.json";
     internal const string IconName = "app.ico";
@@ -57,4 +58,8 @@ internal sealed record ArtworkCharacter(string Id, int SchemaVersion)
         pack.ValidateArtwork(token);
         return pack;
     }
+
+    internal CharacterPack OpenSource(string directory, CancellationToken token) => HasSpineSource
+        ? CharacterPack.OpenSpineSource(SourceDirectory(directory), PlaybackDirectory(directory), Id, token)
+        : LoadValidated(directory, token);
 }

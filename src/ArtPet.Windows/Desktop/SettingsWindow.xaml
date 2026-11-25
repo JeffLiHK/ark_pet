@@ -310,7 +310,7 @@
                             <Label x:Name="VolumeLabel" Content="語音音量" Target="{Binding ElementName=VoiceVolume}" />
                         </DockPanel>
                     </Border>
-                    <TextBlock Text="可用語音和字幕取決於已匯入的角色素材。" Style="{StaticResource Hint}" Margin="0,14,0,0" />
+                    <TextBlock Text="可在「資源管理」下載或刪除配音。" Style="{StaticResource Hint}" Margin="0,14,0,0" />
                 </StackPanel>
             </TabItem>
             <TabItem Header="更新">
@@ -329,17 +329,59 @@
                                        AutomationProperties.LiveSetting="Polite" />
                         </StackPanel>
                     </Border>
-                    <Border Style="{StaticResource SettingRow}">
-                        <StackPanel>
-                            <TextBlock Text="資源" FontWeight="SemiBold" />
-                            <TextBlock x:Name="AssetVersionText" Style="{StaticResource Hint}" Margin="0,4,0,8" />
-                            <Button x:Name="CheckAssetButton" Content="檢查資源更新" Padding="12,6"
-                                    HorizontalAlignment="Left" Click="CheckForAssets" />
-                            <TextBlock x:Name="AssetStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
-                                       AutomationProperties.LiveSetting="Polite" />
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
+            </TabItem>
+            <TabItem Header="資源管理">
+                <ScrollViewer MaxHeight="520" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="模型資源" Style="{StaticResource PageTitle}" />
+                        <Border Style="{StaticResource SettingRow}">
+                            <StackPanel>
+                                <TextBlock x:Name="AssetVersionText" Style="{StaticResource Hint}" Margin="0,4,0,8" />
+                                <Button x:Name="CheckAssetButton" Content="更新全部模型" Padding="12,6"
+                                        HorizontalAlignment="Left" Click="CheckForAssets" />
+                                <TextBlock x:Name="AssetStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                           AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <StackPanel>
+                                <Label Content="選擇模型" Target="{Binding ElementName=ModelOptions}" />
+                                <ComboBox x:Name="ModelOptions" DisplayMemberPath="DisplayName"
+                                          SelectionChanged="ModelSelectionChanged" />
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button x:Name="BuildModelButton" Content="建置影格" Padding="12,6" Click="BuildModel" />
+                                    <Button x:Name="DeleteModelButton" Content="刪除影格" Padding="12,6" Margin="8,0,0,0" Click="DeleteModel" />
+                                </WrapPanel>
+                                <TextBlock x:Name="ModelStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                           AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="語音資源" Style="{StaticResource PageTitle}" Margin="0,16,0,6" />
+                        <Border Style="{StaticResource SettingRow}">
+                            <StackPanel>
+                                <TextBlock Text="日語配音" FontWeight="SemiBold" />
+                                <TextBlock x:Name="JapaneseVoiceStatus" Style="{StaticResource Hint}" Margin="0,4,0,8" />
+                                <WrapPanel>
+                                    <Button x:Name="DownloadJapaneseButton" Content="下載／更新" Tag="ja" Padding="12,6" Click="DownloadVoice" />
+                                    <Button x:Name="DeleteJapaneseButton" Content="刪除配音" Tag="ja" Padding="12,6" Margin="8,0,0,0" Click="DeleteVoice" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource SettingRow}">
+                            <StackPanel>
+                                <TextBlock Text="普通話配音" FontWeight="SemiBold" />
+                                <TextBlock x:Name="MandarinVoiceStatus" Style="{StaticResource Hint}" Margin="0,4,0,8" />
+                                <WrapPanel>
+                                    <Button x:Name="DownloadMandarinButton" Content="下載／更新" Tag="zh-CN" Padding="12,6" Click="DownloadVoice" />
+                                    <Button x:Name="DeleteMandarinButton" Content="刪除配音" Tag="zh-CN" Padding="12,6" Margin="8,0,0,0" Click="DeleteVoice" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock x:Name="VoicePackStatus" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                   AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
         <TextBlock Grid.Row="2" Text="設定會自動儲存" Foreground="{StaticResource MutedBrush}"

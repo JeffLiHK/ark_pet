@@ -15,6 +15,7 @@ internal sealed record AssetReleaseManifest(string PackId, Version AssetVersion,
 {
     internal bool IsCatalog => SchemaVersion >= ArtworkCatalog.SchemaVersion;
     internal bool HasVoiceAssets => SchemaVersion == ArtworkCatalog.VoiceSchemaVersion;
+    internal bool HasSplitResources => SchemaVersion == ArtworkCatalog.SplitResourceSchemaVersion;
 
     internal bool IsValid => PackId == (IsCatalog ? ArtworkCatalog.PackId : ManagedCharacterAssets.LegacyPackId) &&
         IsReleaseVersion(AssetVersion) &&
@@ -22,7 +23,7 @@ internal sealed record AssetReleaseManifest(string PackId, Version AssetVersion,
 
     internal bool Supports(Version appVersion) =>
         SchemaVersion is (CharacterPack.SupportedSchemaVersion or SpineFrameCache.SchemaVersion or
-            ArtworkCatalog.SchemaVersion or ArtworkCatalog.VoiceSchemaVersion) &&
+            ArtworkCatalog.SchemaVersion or ArtworkCatalog.VoiceSchemaVersion or ArtworkCatalog.SplitResourceSchemaVersion) &&
         MinAppVersion <= appVersion;
 
     internal static bool IsReleaseVersion(Version? version) => version is { Build: >= 0, Revision: -1 };
@@ -61,13 +62,14 @@ internal static class ManagedCharacterAssets
                     ArtworkCatalog catalog = ArtworkCatalog.Read(directory);
                     BitmapSource icon = ArtworkCatalog.LoadAppIcon(directory);
                     string? voiceRoot = null;
-                    if (manifest.HasVoiceAssets)
+                    if (manifest.HasVoiceAssets || manifest.HasSplitResources)
                     {
-                        VoiceAssets.Validate(directory, catalog, CancellationToken.None);
+                        VoiceAssets.Validate(directory, catalog, CancellationToken.None, subtitlesOnly: manifest.HasSplitResources);
                         voiceRoot = Path.Combine(directory, VoiceAssets.DirectoryName);
                     }
-                    var packs = catalog.Characters.Select(character =>
-                        character.LoadValidated(directory, CancellationToken.None)).ToArray();
+                    var packs = catalog.Characters.Select(character => manifest.HasSplitResources
+                        ? character.OpenSource(directory, CancellationToken.None)
+                        : character.LoadValidated(directory, CancellationToken.None)).ToArray();
                     return new(installation, packs, icon, voiceRoot);
                 }
 
@@ -119,6 +121,18 @@ internal static class ManagedCharacterAssets
             throw;
         }
 
+        foreach (AssetInstallation? retired in new[] { state.Active, state.Previous }.Distinct())
+        {
+            if (retired is { Id: var id } && id != Guid.Empty && retired != previous &&
+                AssetReleaseManifest.IsReleaseVersion(retired.Version))
+            {
+                string directory = GetDirectory(retired);
+                if (TryRead<AssetReleaseManifest>(Path.Combine(directory, ManifestName)) is { HasSplitResources: true })
+                {
+                    TryDeleteDirectory(Path.Combine(directory, "cache"));
+                }
+            }
+        }
         return installation;
     }
 

@@ -54,6 +54,10 @@ public partial class App : Application
         {
             foreach (OutfitDefinition outfit in pack.StartupOutfits)
             {
+                if (!pack.IsOutfitReady(outfit))
+                {
+                    continue;
+                }
                 await session.SelectAsync(pack, outfit);
                 if (_exiting)
                 {
@@ -169,7 +173,13 @@ public partial class App : Application
             return;
         }
 
-        var settingsWindow = new SettingsWindow(_settings, _artwork?.Installation)
+        var settingsWindow = new SettingsWindow(_settings, _artwork, () =>
+        {
+            foreach (PetEntry pet in _pets)
+            {
+                pet.Window.StopVoice();
+            }
+        })
         {
             Icon = _artwork?.AppIcon ?? _primary?.Window.Icon
         };

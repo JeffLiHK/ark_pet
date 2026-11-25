@@ -29,17 +29,10 @@ internal static class SpineFrameCache
         ["touch"] = "Interact"
     };
 
-    internal static async Task GenerateAsync(string source, string destination, string characterId, CancellationToken token)
+    internal static async Task GenerateAsync(string source, string destination, string characterId, CancellationToken token,
+        string? modelId = null)
     {
-        SourcePack pack;
-        try
-        {
-            pack = ReadSourcePack(source, characterId);
-        }
-        catch (JsonException error)
-        {
-            throw new InvalidDataException("無法讀取 Spine 美術資源清單。", error);
-        }
+        SourcePack pack = ReadSourcePack(source, characterId);
 
         // WebView2 needs an STA with a message pump. Keep rendering and disk I/O off the pet's dispatcher.
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -54,7 +47,7 @@ internal static class SpineFrameCache
                     deadline.CancelAfter(TimeSpan.FromMinutes(10));
                     try
                     {
-                        await RenderAsync(pack, source, destination, deadline.Token);
+                        await RenderAsync(pack, source, destination, modelId, deadline.Token);
                     }
                     catch (OperationCanceledException error) when (!token.IsCancellationRequested)
                     {
@@ -82,7 +75,19 @@ internal static class SpineFrameCache
         await completion.Task;
     }
 
-    private static SourcePack ReadSourcePack(string source, string characterId)
+    internal static SourcePack ReadSourcePack(string source, string characterId)
+    {
+        try
+        {
+            return ReadDefinition(source, characterId);
+        }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException("無法讀取 Spine 美術資源清單。", error);
+        }
+    }
+
+    private static SourcePack ReadDefinition(string source, string characterId)
     {
         using FileStream manifest = File.OpenRead(Path.Combine(source, "character.json"));
         if (manifest.Length > 16 * 1024 ||
@@ -104,7 +109,7 @@ internal static class SpineFrameCache
     internal static bool IsIdentifier(string? value) =>
         value is not null && Regex.IsMatch(value, @"\A[a-z0-9][a-z0-9-]{0,39}\z");
 
-    private static async Task RenderAsync(SourcePack pack, string source, string destination, CancellationToken token)
+    private static async Task RenderAsync(SourcePack pack, string source, string destination, string? modelId, CancellationToken token)
     {
         try
         {
@@ -135,7 +140,7 @@ internal static class SpineFrameCache
                 await EvaluateAsync(webView, ReadScript("ArtPet.SpineWebGL.js") + "\nvoid 0", token);
                 await EvaluateAsync(webView, ReadScript("ArtPet.SpineFrameRenderer.js") + "\nvoid 0", token);
                 await EvaluateAsync(webView, $"window.startRenderer({Json(new { size = CanvasSize, fps = Fps, Animations })})", token);
-                await ExportPackAsync(webView, pack, source, destination, token);
+                await ExportPackAsync(webView, pack, source, destination, modelId, token);
             }
             finally
             {
@@ -153,36 +158,26 @@ internal static class SpineFrameCache
     }
 
     private static async Task ExportPackAsync(CoreWebView2 webView, SourcePack pack, string source,
-        string destination, CancellationToken token)
+        string destination, string? modelId, CancellationToken token)
     {
         var models = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
         foreach (string id in pack.Outfits.Select(outfit => outfit.ModelId).Distinct(StringComparer.Ordinal))
         {
-            string directory = Path.Combine(source, "models", id);
-            string atlas = await File.ReadAllTextAsync(BoundedSourceFile(directory, "model.atlas"), token);
-            string texture = atlas.TrimStart().Split('\n', 2)[0].TrimEnd('\r');
-            if (texture != Path.GetFileName(texture) || texture.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
-                !texture.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                throw new InvalidDataException("Spine 圖集的貼圖路徑無效。");
+                models.Add(id, await LoadModelAsync(webView, source, id, token));
             }
-            string png = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, texture), token));
-            string binary = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, "model.skel"), token));
-            JsonElement result = await EvaluateAsync(webView, $"window.renderer.load({Json(new { id, atlas, texture, png, binary })})", token);
-            var counts = result.Deserialize<Dictionary<string, int>>(ManagedCharacterAssets.JsonOptions);
-            if (counts is null || counts.Count != Animations.Count ||
-                Animations.Keys.Any(clip => !counts.TryGetValue(clip, out int count) || count is < 1 or > MaximumFramesPerModel) ||
-                counts.Values.Sum() > MaximumFramesPerModel)
+            catch (Exception error) when (modelId is not null && modelId != id &&
+                (CharacterPack.IsAssetError(error) || error is JsonException))
             {
-                throw new InvalidDataException("Spine 模型的動畫影格數量無效。");
+                // Valid outfits share a canvas even when another outfit cannot be decoded.
             }
-            models.Add(id, counts);
         }
 
         JsonElement canvas = await EvaluateAsync(webView, "window.renderer.frame()", token);
         long remaining = 1024L * 1024 * 1024;
         var clipsByModel = new Dictionary<string, Dictionary<string, ClipDefinition>>(StringComparer.Ordinal);
-        foreach ((string id, Dictionary<string, int> counts) in models)
+        foreach ((string id, Dictionary<string, int> counts) in models.Where(model => modelId is null || model.Key == modelId))
         {
             var clips = new Dictionary<string, ClipDefinition>(StringComparer.Ordinal);
             foreach ((string clip, int frameCount) in counts)
@@ -220,7 +215,7 @@ internal static class SpineFrameCache
 
         Directory.CreateDirectory(Path.Combine(destination, "portraits"));
         var outfits = new List<OutfitDefinition>();
-        foreach (SourceOutfit outfit in pack.Outfits)
+        foreach (SourceOutfit outfit in pack.Outfits.Where(outfit => clipsByModel.ContainsKey(outfit.ModelId)))
         {
             token.ThrowIfCancellationRequested();
             string portrait = $"portraits/{outfit.Id}.png";
@@ -235,8 +230,56 @@ internal static class SpineFrameCache
 
         await File.WriteAllTextAsync(Path.Combine(destination, "character.json"), Json(new
         {
-            schemaVersion = CharacterPack.SupportedSchemaVersion, pack.Id, pack.DisplayName, pack.DefaultOutfitId, canvas, outfits
+            schemaVersion = CharacterPack.SupportedSchemaVersion, pack.Id, pack.DisplayName,
+            defaultOutfitId = outfits.Any(outfit => outfit.Id == pack.DefaultOutfitId) ? pack.DefaultOutfitId : outfits[0].Id,
+            canvas, outfits
         }), token);
+    }
+
+    private static async Task<Dictionary<string, int>> LoadModelAsync(CoreWebView2 webView, string source, string id, CancellationToken token)
+    {
+        string directory = Path.Combine(source, "models", id);
+        string atlas = await File.ReadAllTextAsync(BoundedSourceFile(directory, "model.atlas"), token);
+        string texture = TextureName(atlas);
+        string png = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, texture), token));
+        string binary = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, "model.skel"), token));
+        JsonElement result = await EvaluateAsync(webView, $"window.renderer.load({Json(new { id, atlas, texture, png, binary })})", token);
+        var counts = result.Deserialize<Dictionary<string, int>>(ManagedCharacterAssets.JsonOptions);
+        if (counts is null || counts.Count != Animations.Count ||
+            Animations.Keys.Any(clip => !counts.TryGetValue(clip, out int count) || count is < 1 or > MaximumFramesPerModel) ||
+            counts.Values.Sum() > MaximumFramesPerModel)
+        {
+            throw new InvalidDataException("Spine 模型的動畫影格數量無效。");
+        }
+        return counts;
+    }
+
+    internal static void ValidateSource(string source, SourcePack pack, CancellationToken token)
+    {
+        foreach (string id in pack.Outfits.Select(outfit => outfit.ModelId).Distinct(StringComparer.Ordinal))
+        {
+            token.ThrowIfCancellationRequested();
+            string directory = Path.Combine(source, "models", id);
+            BoundedSourceFile(directory, "model.skel");
+            string texture = TextureName(File.ReadAllText(BoundedSourceFile(directory, "model.atlas")));
+            CharacterPack.DecodeThumbnail(BoundedSourceFile(directory, texture), 256, 256);
+        }
+        foreach (SourceOutfit outfit in pack.Outfits)
+        {
+            token.ThrowIfCancellationRequested();
+            CharacterPack.DecodeThumbnail(Path.Combine(source, "portraits", outfit.Id + ".png"), 360, 720);
+        }
+    }
+
+    private static string TextureName(string atlas)
+    {
+        string texture = atlas.TrimStart().Split('\n', 2)[0].TrimEnd('\r');
+        if (texture != Path.GetFileName(texture) || texture.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
+            !texture.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("Spine 圖集的貼圖路徑無效。");
+        }
+        return texture;
     }
 
     private static string BoundedSourceFile(string directory, string name)
@@ -292,6 +335,6 @@ internal static class SpineFrameCache
         return reader.ReadToEnd();
     }
 
-    private sealed record SourcePack(int SchemaVersion, string Id, string DisplayName, string DefaultOutfitId, SourceOutfit[] Outfits);
-    private sealed record SourceOutfit(string Id, string DisplayName, string ModelId, bool MoveFacesLeft = false);
+    internal sealed record SourcePack(int SchemaVersion, string Id, string DisplayName, string DefaultOutfitId, SourceOutfit[] Outfits);
+    internal sealed record SourceOutfit(string Id, string DisplayName, string ModelId, bool MoveFacesLeft = false);
 }

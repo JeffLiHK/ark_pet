@@ -30,7 +30,7 @@ internal sealed class PetSession : IDisposable
         }
 
         _request?.Cancel();
-        if (Pack == pack && Outfit?.Definition == outfit)
+        if (Pack == pack && Outfit?.Definition == outfit && pack.IsOutfitReady(outfit))
         {
             _request = null;
             PendingSelection = null;
@@ -49,7 +49,7 @@ internal sealed class PetSession : IDisposable
             await _decodeGate.WaitAsync(request.Token);
             try
             {
-                LoadedOutfit loaded = await Task.Run(() => pack.LoadOutfit(outfit, request.Token), request.Token);
+                LoadedOutfit loaded = await Task.Run(() => pack.LoadOutfitAsync(outfit, request.Token), request.Token);
                 if (_request == request)
                 {
                     Pack = pack;

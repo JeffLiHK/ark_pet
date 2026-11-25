@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 
 namespace ArtPet.Windows.Media;
@@ -35,6 +36,7 @@ internal sealed class CharacterPack
     internal string DisplayName { get; }
     internal IReadOnlyList<OutfitDefinition> Outfits { get; }
     internal OutfitDefinition DefaultOutfit { get; }
+    internal SpineModelLibrary? Models { get; private init; }
     internal IEnumerable<OutfitDefinition> StartupOutfits => Outfits.Where(outfit => outfit != DefaultOutfit).Prepend(DefaultOutfit);
 
     internal static IEnumerable<CharacterPack> FindInstalled(AssetSnapshot? snapshot)
@@ -62,12 +64,31 @@ internal sealed class CharacterPack
             .Distinct(StringComparer.OrdinalIgnoreCase);
         foreach (string directory in candidates)
         {
-            if (TryOpen(directory) is { } pack)
+            if (TryOpen(directory) is { } pack && snapshot?.Packs.Any(candidate =>
+                candidate.Models is not null && StringComparer.OrdinalIgnoreCase.Equals(candidate.Id, pack.Id)) != true)
             {
                 yield return pack;
             }
         }
     }
+
+    internal static CharacterPack OpenSpineSource(string directory, string cache, string characterId, CancellationToken token)
+    {
+        var definition = SpineFrameCache.ReadSourcePack(directory, characterId);
+        SpineFrameCache.ValidateSource(directory, definition, token);
+        var outfits = definition.Outfits.Select(outfit => new OutfitDefinition(outfit.Id, outfit.DisplayName,
+            $"previews/{outfit.Id}.png", null, null, null, null, null, $"portraits/{outfit.Id}.png", outfit.MoveFacesLeft)).ToArray();
+        return new CharacterPack(directory, new(SupportedSchemaVersion, characterId, definition.DisplayName,
+            definition.DefaultOutfitId, new(1, 1, 0, 0), outfits))
+        {
+            Models = new(directory, cache, definition)
+        };
+    }
+
+    internal bool IsOutfitReady(OutfitDefinition outfit) => Models?.IsOutfitBuilt(outfit) ?? true;
+
+    internal Task<LoadedOutfit> LoadOutfitAsync(OutfitDefinition outfit, CancellationToken token) =>
+        Models is { } models ? models.LoadAsync(outfit, token) : Task.FromResult(LoadOutfit(outfit, token));
 
     private static IEnumerable<string> FindCharacterDirectories(string assets)
     {
@@ -265,6 +286,12 @@ internal sealed class CharacterPack
 
     internal BitmapSource? LoadPreview(OutfitDefinition outfit)
     {
+        if (Models?.TryOpen(outfit) is { } generated &&
+            generated.Outfits.FirstOrDefault(candidate => candidate.Id == outfit.Id) is { } cached)
+        {
+            return generated.LoadPreview(cached);
+        }
+
         if (!string.IsNullOrWhiteSpace(outfit.Preview))
         {
             try

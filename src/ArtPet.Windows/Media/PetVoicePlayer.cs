@@ -11,7 +11,7 @@ namespace ArtPet.Windows.Media;
 
 internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? managedVoiceRoot)
 {
-    private Task<VoiceLine[]>? _lines;
+    private (string Character, string Voice, string Subtitle)? _selection;
     private MediaPlayer? _player;
     private long _playRequest;
     private double _volume = 1;
@@ -29,21 +29,22 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
     internal void Configure(string? characterId, string voiceLanguage, string subtitleLanguage)
     {
         Stop();
-        _lines = characterId is not null && SpineFrameCache.IsIdentifier(characterId)
-            ? Task.Run(() => ReadLines(characterId, managedVoiceRoot, voiceLanguage, subtitleLanguage))
+        _selection = characterId is not null && SpineFrameCache.IsIdentifier(characterId)
+            ? (characterId, voiceLanguage, subtitleLanguage)
             : null;
     }
 
     internal async Task PlayRandomAsync()
     {
         Stop();
-        if (_lines is not { } lines)
+        if (_selection is not { } selection)
         {
             return;
         }
 
         long request = _playRequest;
-        VoiceLine[] available = await lines;
+        VoiceLine[] available = await Task.Run(() =>
+            ReadLines(selection.Character, managedVoiceRoot, selection.Voice, selection.Subtitle));
         if (_playRequest != request || available.Length == 0)
         {
             return;
@@ -110,7 +111,9 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
         string? legacy = characterId == ManagedCharacterAssets.LegacyPackId ? Path.Combine(localRoot, "霍爾海雅") : null;
         string?[] roots = [managed, local, legacy];
 
-        string[] paths = roots.OfType<string>().Select(root => FindAudio(root, voiceLanguage))
+        string? downloaded = VoiceLibrary.GetVoiceRoot(voiceLanguage);
+        string?[] audioRoots = [downloaded is null ? null : Path.Combine(downloaded, characterId), managed, local, legacy];
+        string[] paths = audioRoots.OfType<string>().Select(root => FindAudio(root, voiceLanguage))
             .FirstOrDefault(files => files.Length > 0) ?? [];
         if (paths.Length == 0)
         {

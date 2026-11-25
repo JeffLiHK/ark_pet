@@ -17,8 +17,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-if ([version]$MinAppVersion -lt [version]'1.3.1') {
-    throw 'The resource package with voice and subtitles requires ArtPet 1.3.1 or newer.'
+if ([version]$MinAppVersion -lt [version]'1.3.2') {
+    throw 'Separate model and voice packages require ArtPet 1.3.2 or newer.'
 }
 $output = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 if (Test-Path -LiteralPath $output) {
@@ -49,7 +49,7 @@ function Add-ReleaseFile([IO.Compression.ZipArchive] $Archive, [string] $File, [
         $Archive, $File, $Entry.Replace('\', '/'), [IO.Compression.CompressionLevel]::Optimal)
 }
 
-function Add-VoiceFiles([IO.Compression.ZipArchive] $Archive, [string] $Root, [string] $CharacterId) {
+function Add-VoiceFiles([IO.Compression.ZipArchive] $Archive, [hashtable] $VoiceArchives, [string] $Root, [string] $CharacterId) {
     $characters = @(Join-Path $Root $CharacterId)
     if ($CharacterId -ceq 'hoolheyak') {
         $characters += Join-Path $Root '霍爾海雅'
@@ -79,7 +79,7 @@ function Add-VoiceFiles([IO.Compression.ZipArchive] $Archive, [string] $Root, [s
                     } finally {
                         $stream.Dispose()
                     }
-                    Add-ReleaseFile $Archive $source "voices/$CharacterId/$language/$($file.ToLowerInvariant())"
+                    Add-ReleaseFile $VoiceArchives[$language] $source "voices/$CharacterId/$language/$($file.ToLowerInvariant())"
                 }
                 $included["audio/$language"] = $true
                 break
@@ -118,6 +118,10 @@ $staging = Join-Path $outputParent $stagingName
 $result = Join-Path $staging 'release'
 [void][IO.Directory]::CreateDirectory($result)
 $archivePath = Join-Path $result 'ArtPet-assets.zip'
+$voicePaths = [ordered]@{
+    ja = (Join-Path $result 'ArtPet-voice-ja.zip')
+    'zh-CN' = (Join-Path $result 'ArtPet-voice-zh-CN.zip')
+}
 $manifestPath = Join-Path $result 'assets-manifest.json'
 $imageGlobs = @('*.png', '*.jpg', '*.jpeg', '*.ico', '*.gif', '*.bmp', '*.tif', '*.tiff', '*.webp')
 try {
@@ -151,7 +155,11 @@ try {
     }
 
     $archive = [IO.Compression.ZipFile]::Open($archivePath, [IO.Compression.ZipArchiveMode]::Create)
+    $voiceArchives = @{}
     try {
+        foreach ($language in $voicePaths.Keys) {
+            $voiceArchives[$language] = [IO.Compression.ZipFile]::Open($voicePaths[$language], [IO.Compression.ZipArchiveMode]::Create)
+        }
         Add-ReleaseFile $archive (Resolve-Path -LiteralPath $AppIcon).ProviderPath 'app.ico'
         $characters = [System.Collections.Generic.List[object]]::new()
         if ($legacyPath) {
@@ -193,7 +201,7 @@ try {
         }
         $voiceRoot = (Resolve-Path -LiteralPath $VoiceDirectory).ProviderPath
         foreach ($character in $characters) {
-            Add-VoiceFiles $archive $voiceRoot $character.id
+            Add-VoiceFiles $archive $voiceArchives $voiceRoot $character.id
         }
         if (Test-Path -LiteralPath $ImageDirectory -PathType Container) {
             $ImageDirectory = (Resolve-Path -LiteralPath $ImageDirectory).ProviderPath
@@ -210,22 +218,27 @@ try {
         }
     } finally {
         $archive.Dispose()
+        foreach ($voiceArchive in $voiceArchives.Values) {
+            $voiceArchive.Dispose()
+        }
     }
 
-    $archive = [IO.Compression.ZipFile]::OpenRead($archivePath)
-    try {
-        $expanded = ($archive.Entries | Measure-Object -Property Length -Sum).Sum
-        if ($archive.Entries.Count -gt 20000 -or $expanded -gt 1GB -or (Get-Item -LiteralPath $archivePath).Length -gt 512MB) {
-            throw 'The full artwork package exceeds the updater file count or size limit.'
+    foreach ($zipPath in (@($archivePath) + @($voicePaths.Values))) {
+        $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
+        try {
+            $expanded = ($archive.Entries | Measure-Object -Property Length -Sum).Sum
+            if ($archive.Entries.Count -gt 20000 -or $expanded -gt 1GB -or (Get-Item -LiteralPath $zipPath).Length -gt 512MB) {
+                throw "The archive exceeds the updater file count or size limit: $zipPath"
+            }
+        } finally {
+            $archive.Dispose()
         }
-    } finally {
-        $archive.Dispose()
     }
 
     [ordered]@{
         packId = 'artpet'
         assetVersion = $AssetVersion
-        schemaVersion = 4
+        schemaVersion = 5
         minAppVersion = $MinAppVersion
     } | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
 
@@ -238,4 +251,6 @@ try {
     }
 }
 
-Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $output 'ArtPet-assets.zip'), (Join-Path $output 'assets-manifest.json')
+$attachments = @('ArtPet-assets.zip', 'ArtPet-voice-ja.zip', 'ArtPet-voice-zh-CN.zip', 'assets-manifest.json') |
+    ForEach-Object { Join-Path $output $_ }
+Get-FileHash -Algorithm SHA256 -LiteralPath $attachments

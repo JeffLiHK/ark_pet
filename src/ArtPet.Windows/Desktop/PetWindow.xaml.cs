@@ -157,6 +157,8 @@ public partial class PetWindow : Window
         }
     }
 
+    internal void StopVoice() => _voice.Stop();
+
     private void ApplyVoiceSettings()
     {
         VoiceSubtitle.Language = XmlLanguage.GetLanguage(Settings.SubtitleLanguage == PetSettings.Japanese ? "ja-JP" : "zh-TW");
