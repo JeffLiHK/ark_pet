@@ -8,18 +8,21 @@ using System.Windows.Media.Imaging;
 namespace ArtPet.Windows.Media;
 
 internal sealed record AssetInstallation(Version Version, Guid Id);
-internal sealed record AssetSnapshot(AssetInstallation Installation, CharacterPack[] Packs, BitmapSource? AppIcon);
+internal sealed record AssetSnapshot(AssetInstallation Installation, CharacterPack[] Packs, BitmapSource? AppIcon,
+    string? VoiceRoot = null);
 
 internal sealed record AssetReleaseManifest(string PackId, Version AssetVersion, int SchemaVersion, Version MinAppVersion)
 {
     internal bool IsCatalog => SchemaVersion >= ArtworkCatalog.SchemaVersion;
+    internal bool HasVoiceAssets => SchemaVersion == ArtworkCatalog.VoiceSchemaVersion;
 
     internal bool IsValid => PackId == (IsCatalog ? ArtworkCatalog.PackId : ManagedCharacterAssets.LegacyPackId) &&
         IsReleaseVersion(AssetVersion) &&
         SchemaVersion > 0 && IsReleaseVersion(MinAppVersion);
 
     internal bool Supports(Version appVersion) =>
-        SchemaVersion is (CharacterPack.SupportedSchemaVersion or SpineFrameCache.SchemaVersion or ArtworkCatalog.SchemaVersion) &&
+        SchemaVersion is (CharacterPack.SupportedSchemaVersion or SpineFrameCache.SchemaVersion or
+            ArtworkCatalog.SchemaVersion or ArtworkCatalog.VoiceSchemaVersion) &&
         MinAppVersion <= appVersion;
 
     internal static bool IsReleaseVersion(Version? version) => version is { Build: >= 0, Revision: -1 };
@@ -57,9 +60,15 @@ internal static class ManagedCharacterAssets
                 {
                     ArtworkCatalog catalog = ArtworkCatalog.Read(directory);
                     BitmapSource icon = ArtworkCatalog.LoadAppIcon(directory);
+                    string? voiceRoot = null;
+                    if (manifest.HasVoiceAssets)
+                    {
+                        VoiceAssets.Validate(directory, catalog, CancellationToken.None);
+                        voiceRoot = Path.Combine(directory, VoiceAssets.DirectoryName);
+                    }
                     var packs = catalog.Characters.Select(character =>
                         character.LoadValidated(directory, CancellationToken.None)).ToArray();
-                    return new(installation, packs, icon);
+                    return new(installation, packs, icon, voiceRoot);
                 }
 
                 if (CharacterPack.TryOpen(directory) is { Id: LegacyPackId } pack &&

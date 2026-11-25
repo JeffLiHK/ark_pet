@@ -12,13 +12,13 @@ dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug
 
 - 畫布預設為 160 DIP，在主螢幕工作區右下角，離右邊及底部各 16 DIP，並置頂。
 - 顯示或換裝時先播 Idle。每個待機動作預設完整循環 12 次，再淡化過渡到另一個動作。Move 會在桌面原位播放。短按互動結束後會回到原待機動作。
-- 已匯入語音時，短按霍爾海雅會隨機播放一條語音，預設使用日語配音與繁體中文字幕。 [語音素材匯入方式](docs/hoolheyak-voice.md)
+- 安裝完整資源包後，短按霍爾海雅會隨機播放一條語音，預設使用日語配音與繁體中文字幕。 [語音與字幕](docs/hoolheyak-voice.md)
 - 按住可將角色拖到螢幕邊緣或拖出螢幕。右鍵可開衣櫃、切換置頂或隱藏。衣櫃以立繪顯示角色列表，選擇角色後可查看各造型的模型預覽和立繪。
 - 右鍵選「轉身」可水平翻轉目前小人。在「設定 → 一般」開啟自由模式後，有 Move 動畫的小人會在目前螢幕的工作區散步，走到左右邊緣時有機會轉身折返。散步途中會停下發呆，有 Sleep 動畫的造型偶爾會停下睡覺。可調整「自由模式步速」為預設慢步的 50%–150%。互動期間會暫停走動。
 - 在「設定 → 一般」開啟「物理模式」後，把小人拖到半空中再放開，就會落到可見的視窗上緣、工作列上緣或螢幕底部。有坐姿或睡姿的造型會在對應的位置休息。若也開啟自由模式，小人會沿著支撐面散步，走出邊緣時繼續下落。
 - 從小人右鍵選單或通知區選「新增一隻小人」，會新增相同造型的小人。每隻可獨立換裝、拖曳和隱藏。通知區的「管理小人」可找回隱藏的小人或移除新增的小人。重新啟動時從一隻小人開始。
 - 右鍵選單和工作列通知區都可開啟設定視窗。「一般」可調整縮放、幀率、待機循環次數和互動模式，也可為目前 Windows 使用者啟用登入時啟動。「外觀」可分別調整高亮描邊和陰影。「語音與字幕」可調整配音、字幕和語音音量，音量設為 0% 即靜音。循環次數可直接輸入，按 Enter 或離開欄位即可套用。畫面與語音偏好會自動保存到 `local-data/settings.json`。關閉互動模式後，滑鼠會穿透角色，仍可從通知區開設定恢復。
-- 在「設定 → 更新」按一次「檢查資源更新」，程式會自動下載並安裝所有官方角色及應用程式美術資源的最新版本。Spine 動畫透過本機的 Microsoft Edge WebView2 Runtime 在背景生成並驗證影格，整套素材會在下次啟動時生效。「檢查程式更新」可另外更新 Windows x64 自包含程式。兩種更新都會驗證 GitHub 提供的 SHA-256。
+- 在「設定 → 更新」按一次「檢查資源更新」，程式會自動下載並安裝官方角色、圖片、圖示、語音與字幕。Spine 動畫透過本機的 Microsoft Edge WebView2 Runtime 在背景生成並驗證影格，整套素材會在下次啟動時生效。「檢查程式更新」可另外更新 Windows x64 自包含程式。兩種更新都會驗證 GitHub 提供的 SHA-256。
 - 從通知區的 **Art Pet** 圖示可開衣櫃、顯示、隱藏、切換置頂、移回主螢幕右下角或結束。找不到圖示時，展開通知區的隱藏圖示。雙擊圖示會顯示角色。
 - 造型、位置、置頂及顯示狀態在當次執行期間有效。再次啟動會套用預設造型和桌面位置。同一 Windows 登入工作階段只會執行一個實例。
 
@@ -57,13 +57,14 @@ Compress-Archive -Path artifacts/program-v1.3.0/publish/* -DestinationPath artif
 
 將 `ArtPet-win-x64.zip` 上傳到 `JeffLiHK/art_pet` 的公開正式 Release，程式升級會保留既有的角色素材及設定。
 
-美術資源用獨立版本發佈。以下指令會驗證本機角色包，產出美術 ZIP 和相容性清單。
+完整資源用獨立版本發佈。先準備角色素材和語音，再打包資源 ZIP 和相容性清單。
 
 ```powershell
-pwsh -File scripts/BuildArtworkAssetRelease.ps1 -AssetVersion 1.1.0 -MinAppVersion 1.3.0
+pwsh -File scripts/ImportHoolheyakVoice.ps1
+pwsh -File scripts/BuildArtworkAssetRelease.ps1 -AssetVersion 1.1.0 -MinAppVersion 1.3.1
 ```
 
-腳本把霍爾海雅的 Spine 骨骼、圖集、貼圖及立繪、小芽的動畫和應用程式圖示打成 `ArtPet-assets.zip`。新增官方角色時，將含 `character.json` 的角色資料夾放入 `local-data/release-characters/<角色 ID>/`。同名資料夾可提供現有角色的替換素材。Spine 角色可隨包提供 `portraits/<造型 ID>.png`、`previews/<造型 ID>.png` 和 `icons/<造型 ID>.ico`，其他版本可在造型清單指定圖片。共用圖片可放入 `local-data/release-images/`，應用程式圖示可用 `-AppIcon` 指定。
+腳本把霍爾海雅的 Spine 骨骼、圖集、貼圖、立繪、配音與字幕，以及小芽的動畫和應用程式圖示打成 `ArtPet-assets.zip`。新增官方角色時，將含 `character.json` 的角色資料夾放入 `local-data/release-characters/<角色 ID>/`。同名資料夾可提供現有角色的替換素材。Spine 角色可隨包提供 `portraits/<造型 ID>.png`、`previews/<造型 ID>.png` 和 `icons/<造型 ID>.ico`，其他版本可在造型清單指定圖片。共用圖片可放入 `local-data/release-images/`，應用程式圖示可用 `-AppIcon` 指定。新增角色的語音可放在 `local-data/voices/<角色 ID>/<語言代碼>/`，或透過 `-VoiceDirectory` 指定準備好的語音根目錄。
 
 將 ZIP 和版本清單附加到 `JeffLiHK/art_pet_assets` 對應的 Release。程式在 `local-data/managed-assets/` 保存原始素材和生成的影格，整套驗證完成才啟用新版。啟動時若資源不完整，會嘗試上一個版本、隨附素材及本機匯入素材。檔案總管顯示的 EXE 內嵌圖示由程式 Release 更新。 [完整發佈流程](AGENTS.md#publish-github-releases)
 

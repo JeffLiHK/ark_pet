@@ -210,7 +210,7 @@ internal partial class SettingsWindow : Window
         CancellationToken token = _updates.Token;
         _installing = true;
         RefreshUpdateButtons();
-        AssetStatus.Text = "正在檢查美術資源…";
+        AssetStatus.Text = "正在檢查資源…";
         try
         {
             AssetReleaseCheck result = await AssetReleaseUpdater.CheckAsync(_installedArtwork, token);
@@ -222,11 +222,11 @@ internal partial class SettingsWindow : Window
                 return;
             }
 
-            AssetStatus.Text = "正在下載並驗證美術資源…";
+            AssetStatus.Text = "正在下載並驗證資源…";
             var progress = new Progress<string>(message => AssetStatus.Text = message);
             await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _installedArtwork, progress, token), token);
             RefreshAssetVersion();
-            AssetStatus.Text = "美術資源已更新，將於下次啟動生效。";
+            AssetStatus.Text = "資源已更新，將於下次啟動生效。";
         }
         catch (InvalidDataException error)
         {
@@ -236,7 +236,7 @@ internal partial class SettingsWindow : Window
         {
             if (!token.IsCancellationRequested)
             {
-                AssetStatus.Text = "無法下載或安裝美術資源，請確認網路連線及資料夾寫入權限後再試。";
+                AssetStatus.Text = "無法下載或安裝資源，請確認網路連線及資料夾寫入權限後再試。";
             }
         }
         finally

@@ -10,6 +10,7 @@ namespace ArtPet.Windows.Media;
 internal sealed record ArtworkCatalog(ArtworkCharacter[] Characters)
 {
     internal const int SchemaVersion = 3;
+    internal const int VoiceSchemaVersion = 4;
     internal const string PackId = "artpet";
     internal const string CatalogName = "catalog.json";
     internal const string IconName = "app.ico";

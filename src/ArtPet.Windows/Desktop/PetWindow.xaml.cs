@@ -47,12 +47,12 @@ public partial class PetWindow : Window
     {
     }
 
-    internal PetWindow(int placementSlot)
+    internal PetWindow(int placementSlot, string? voiceRoot = null)
     {
         _placementSlot = placementSlot;
         InitializeComponent();
         _player = new FramePlayer(CharacterImage, Breeze);
-        _voice = new PetVoicePlayer(SetVoiceSubtitle);
+        _voice = new PetVoicePlayer(SetVoiceSubtitle, voiceRoot);
         ContextMenu.Opened += (_, _) => PauseRoaming();
         VoiceBubble.CustomPopupPlacementCallback = PlaceVoiceBubble;
         // An open WPF popup does not follow its placement target when the window moves.
