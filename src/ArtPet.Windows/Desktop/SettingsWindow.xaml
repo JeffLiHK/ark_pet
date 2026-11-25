@@ -328,7 +328,7 @@
                     </Border>
                     <Border Style="{StaticResource SettingRow}">
                         <StackPanel>
-                            <TextBlock Text="美術資源" FontWeight="SemiBold" />
+                            <TextBlock Text="資源" FontWeight="SemiBold" />
                             <TextBlock x:Name="AssetVersionText" Style="{StaticResource Hint}" Margin="0,4,0,8" />
                             <Button x:Name="CheckAssetButton" Content="檢查資源更新" Padding="12,6"
                                     HorizontalAlignment="Left" Click="CheckForAssets" />

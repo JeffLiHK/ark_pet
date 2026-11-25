@@ -11,13 +11,14 @@ param(
 
     [string] $CharacterDirectory = (Join-Path $PSScriptRoot '../local-data/release-characters'),
     [string] $ImageDirectory = (Join-Path $PSScriptRoot '../local-data/release-images'),
+    [string] $VoiceDirectory = (Join-Path $PSScriptRoot '../local-data/voices'),
     [string] $AppIcon = (Join-Path $PSScriptRoot '../src/ArtPet.Windows/Media/Sprout.ico'),
     [string] $OutputDirectory = (Join-Path $PSScriptRoot "../artifacts/assets-v$AssetVersion")
 )
 
 $ErrorActionPreference = 'Stop'
-if ([version]$MinAppVersion -lt [version]'1.3.0') {
-    throw 'The full artwork package requires ArtPet 1.3.0 or newer.'
+if ([version]$MinAppVersion -lt [version]'1.3.1') {
+    throw 'The resource package with voice and subtitles requires ArtPet 1.3.1 or newer.'
 }
 $output = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDirectory)
 if (Test-Path -LiteralPath $output) {
@@ -48,6 +49,69 @@ function Add-ReleaseFile([IO.Compression.ZipArchive] $Archive, [string] $File, [
         $Archive, $File, $Entry.Replace('\', '/'), [IO.Compression.CompressionLevel]::Optimal)
 }
 
+function Add-VoiceFiles([IO.Compression.ZipArchive] $Archive, [string] $Root, [string] $CharacterId) {
+    $characters = @(Join-Path $Root $CharacterId)
+    if ($CharacterId -ceq 'hoolheyak') {
+        $characters += Join-Path $Root '霍爾海雅'
+    }
+    $included = @{}
+    foreach ($language in @('ja', 'zh-CN', 'zh-TW')) {
+        $folders = @($characters | ForEach-Object { Join-Path $_ $language } |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Container })
+        if ($language -in @('ja', 'zh-CN')) {
+            foreach ($folder in $folders) {
+                $files = @(Get-ReleaseFiles $folder @('*.mp3') | Where-Object { $_ -match '^cn_[0-9]{3}\.mp3$' })
+                if ($files.Count -eq 0) {
+                    continue
+                }
+                foreach ($file in $files) {
+                    $source = Join-Path $folder $file
+                    $stream = [IO.File]::OpenRead($source)
+                    try {
+                        $first = $stream.ReadByte()
+                        $second = $stream.ReadByte()
+                        $third = $stream.ReadByte()
+                        if ($stream.Length -lt 10 -or (-not (
+                            ($first -eq 73 -and $second -eq 68 -and $third -eq 51) -or
+                            ($first -eq 255 -and ($second -band 224) -eq 224)))) {
+                            throw "Invalid MP3: $source"
+                        }
+                    } finally {
+                        $stream.Dispose()
+                    }
+                    Add-ReleaseFile $Archive $source "voices/$CharacterId/$language/$($file.ToLowerInvariant())"
+                }
+                $included["audio/$language"] = $true
+                break
+            }
+        }
+        if ($language -in @('ja', 'zh-TW')) {
+            $subtitle = $folders | ForEach-Object { Join-Path $_ 'subtitles.json' } |
+                Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+            if ($subtitle) {
+                if ((Get-Item -LiteralPath $subtitle).Length -gt 1MB) {
+                    throw "Subtitle file is too large: $subtitle"
+                }
+                $lines = [IO.File]::ReadAllText($subtitle) | ConvertFrom-Json -AsHashtable
+                if ($lines -isnot [System.Collections.IDictionary] -or $lines.Count -eq 0 -or
+                    ($lines.GetEnumerator() | Where-Object { $_.Key -cnotmatch '^cn_[0-9]{3}$' -or
+                        $_.Value -isnot [string] -or [string]::IsNullOrWhiteSpace($_.Value) } | Select-Object -First 1)) {
+                    throw "Invalid subtitle file: $subtitle"
+                }
+                Add-ReleaseFile $Archive $subtitle "voices/$CharacterId/$language/subtitles.json"
+                $included["subtitles/$language"] = $true
+            }
+        }
+    }
+    if ($CharacterId -ceq 'hoolheyak') {
+        foreach ($required in @('audio/ja', 'audio/zh-CN', 'subtitles/ja', 'subtitles/zh-TW')) {
+            if (-not $included.ContainsKey($required)) {
+                throw "Hoolheyak is missing $required. Run scripts/ImportHoolheyakVoice.ps1 or supply a complete VoiceDirectory."
+            }
+        }
+    }
+}
+
 $outputParent = [IO.Path]::GetDirectoryName($output)
 $stagingName = '.artpet-artwork-' + [guid]::NewGuid().ToString('N')
 $staging = Join-Path $outputParent $stagingName
@@ -71,7 +135,7 @@ try {
 
     if (-not $sources.Contains('sprout')) {
         $sproutDirectory = Join-Path $staging 'sprout'
-        & dotnet run --file (Join-Path $PSScriptRoot 'ExportSproutArtwork.cs') -- $sproutDirectory
+        & dotnet run --configuration Release --file (Join-Path $PSScriptRoot 'ExportSproutArtwork.cs') -- $sproutDirectory
         if ($LASTEXITCODE -ne 0) {
             throw 'Unable to export the bundled Sprout artwork.'
         }
@@ -127,6 +191,10 @@ try {
         if ($characters.Count -gt 64) {
             throw 'The artwork package exceeds the 64-character limit.'
         }
+        $voiceRoot = (Resolve-Path -LiteralPath $VoiceDirectory).ProviderPath
+        foreach ($character in $characters) {
+            Add-VoiceFiles $archive $voiceRoot $character.id
+        }
         if (Test-Path -LiteralPath $ImageDirectory -PathType Container) {
             $ImageDirectory = (Resolve-Path -LiteralPath $ImageDirectory).ProviderPath
             foreach ($file in (Get-ReleaseFiles $ImageDirectory $imageGlobs)) {
@@ -157,7 +225,7 @@ try {
     [ordered]@{
         packId = 'artpet'
         assetVersion = $AssetVersion
-        schemaVersion = 3
+        schemaVersion = 4
         minAppVersion = $MinAppVersion
     } | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8NoBOM
 

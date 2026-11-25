@@ -79,7 +79,7 @@ public partial class App : Application
 
     private PetEntry RegisterPet(PetSession session, int slot)
     {
-        var window = new PetWindow(slot) { Icon = _artwork?.AppIcon };
+        var window = new PetWindow(slot, _artwork?.VoiceRoot) { Icon = _artwork?.AppIcon };
         var pet = new PetEntry(slot, window, session);
         _pets.Add(pet);
         window.ApplySettings(_settings);

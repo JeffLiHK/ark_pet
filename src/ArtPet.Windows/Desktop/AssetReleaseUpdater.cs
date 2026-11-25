@@ -30,28 +30,28 @@ internal static class AssetReleaseUpdater
         GitHubRelease? release = await GitHubReleaseSource.GetLatestAsync(Repository, token);
         if (release is null)
         {
-            return new(null, "GitHub 目前沒有可下載的美術資源。");
+            return new(null, "GitHub 目前沒有可下載的資源。");
         }
 
         if (release.Tag is not { Length: > 1 } tag || tag[0] != 'v' ||
             !Version.TryParse(tag[1..], out Version? version) || !AssetReleaseManifest.IsReleaseVersion(version))
         {
-            return new(null, "美術資源的發行版本格式無法辨識。");
+            return new(null, "資源的發行版本格式無法辨識。");
         }
 
         if (version <= Pending?.Version)
         {
-            return new(null, "新版美術資源已安裝，將於下次啟動生效。");
+            return new(null, "新版資源已安裝，將於下次啟動生效。");
         }
 
         if (version <= running?.Version)
         {
-            return new(null, "已是最新美術資源。");
+            return new(null, "已是最新資源。");
         }
 
         if (GitHubReleaseSource.FindPackage(Repository, release, ManagedCharacterAssets.ManifestName) is not { Size: <= 16 * 1024 } metadata)
         {
-            return new(null, "GitHub 尚未提供可驗證的美術資源包和版本清單。");
+            return new(null, "GitHub 尚未提供可驗證的資源包和版本清單。");
         }
 
         using var contents = new MemoryStream();
@@ -61,26 +61,26 @@ internal static class AssetReleaseUpdater
             contents, ManagedCharacterAssets.JsonOptions, token);
         if (manifest is not { IsValid: true } || manifest.AssetVersion != version)
         {
-            return new(null, "美術資源版本清單與 GitHub 發行版本不符。");
+            return new(null, "資源版本清單與 GitHub 發行版本不符。");
         }
 
         if (manifest.MinAppVersion > ReleaseUpdater.CurrentVersion)
         {
-            return new(null, $"美術資源 {version} 需要程式 {manifest.MinAppVersion} 或更新版本。");
+            return new(null, $"資源 {version} 需要程式 {manifest.MinAppVersion} 或更新版本。");
         }
 
         if (!manifest.Supports(ReleaseUpdater.CurrentVersion))
         {
-            return new(null, $"目前的程式版本無法讀取美術資源 {version}。");
+            return new(null, $"目前的程式版本無法讀取資源 {version}。");
         }
 
         string archiveName = manifest.IsCatalog ? ArchiveName : LegacyArchiveName;
         if (GitHubReleaseSource.FindPackage(Repository, release, archiveName) is not { Size: <= MaximumArchiveSize } package)
         {
-            return new(null, "GitHub 尚未提供可驗證的美術資源包。");
+            return new(null, "GitHub 尚未提供可驗證的資源包。");
         }
 
-        return new(new(manifest, package), $"找到美術資源 {version}。");
+        return new(new(manifest, package), $"找到資源 {version}。");
     }
 
     internal static async Task InstallAsync(AssetReleaseUpdate update, AssetInstallation? running,
@@ -107,7 +107,7 @@ internal static class AssetReleaseUpdater
             ExtractPackage(archive, payload, update.Manifest.SchemaVersion, token);
             if (update.Manifest.IsCatalog)
             {
-                await PrepareCatalogAsync(payload, progress, token);
+                await PrepareCatalogAsync(payload, update.Manifest.HasVoiceAssets, progress, token);
             }
             else
             {
@@ -120,7 +120,7 @@ internal static class AssetReleaseUpdater
                 }
                 if (CharacterPack.TryOpen(payload) is not { Id: ManagedCharacterAssets.LegacyPackId } pack)
                 {
-                    throw new InvalidDataException("美術資源包缺少有效的霍爾海雅角色清單。");
+                    throw new InvalidDataException("資源包缺少有效的霍爾海雅角色清單。");
                 }
                 pack.ValidateArtwork(token);
             }
@@ -135,7 +135,8 @@ internal static class AssetReleaseUpdater
         }
     }
 
-    private static async Task PrepareCatalogAsync(string payload, IProgress<string> progress, CancellationToken token)
+    private static async Task PrepareCatalogAsync(string payload, bool hasVoiceAssets, IProgress<string> progress,
+        CancellationToken token)
     {
         ArtworkCatalog catalog;
         try
@@ -144,15 +145,19 @@ internal static class AssetReleaseUpdater
         }
         catch (JsonException error)
         {
-            throw new InvalidDataException("無法讀取完整美術資源包的角色清單。", error);
+            throw new InvalidDataException("無法讀取完整資源包的角色清單。", error);
         }
 
         ArtworkCatalog.LoadAppIcon(payload);
+        if (hasVoiceAssets)
+        {
+            VoiceAssets.Validate(payload, catalog, token);
+        }
         for (int index = 0; index < catalog.Characters.Length; index++)
         {
             token.ThrowIfCancellationRequested();
             ArtworkCharacter character = catalog.Characters[index];
-            progress.Report($"正在準備角色美術資源（{index + 1}/{catalog.Characters.Length}）…");
+            progress.Report($"正在準備角色資源（{index + 1}/{catalog.Characters.Length}）…");
             if (character.HasSpineSource)
             {
                 await SpineFrameCache.GenerateAsync(character.SourceDirectory(payload), character.PlaybackDirectory(payload),
@@ -165,8 +170,12 @@ internal static class AssetReleaseUpdater
     private static bool IsAllowedAsset(string path, int schemaVersion)
     {
         string extension = Path.GetExtension(path).ToLowerInvariant();
-        if (schemaVersion == ArtworkCatalog.SchemaVersion)
+        if (schemaVersion is ArtworkCatalog.SchemaVersion or ArtworkCatalog.VoiceSchemaVersion)
         {
+            if (schemaVersion == ArtworkCatalog.VoiceSchemaVersion && VoiceAssets.IsPackageFile(path))
+            {
+                return true;
+            }
             if (path is ArtworkCatalog.CatalogName or ArtworkCatalog.IconName)
             {
                 return true;
@@ -188,7 +197,7 @@ internal static class AssetReleaseUpdater
         using ZipArchive zip = ZipFile.OpenRead(archive);
         if (zip.Entries.Count > MaximumEntries)
         {
-            throw new InvalidDataException("美術資源包的檔案數量超出上限。");
+            throw new InvalidDataException("資源包的檔案數量超出上限。");
         }
 
         char[] invalidCharacters = Path.GetInvalidFileNameChars();
@@ -204,7 +213,7 @@ internal static class AssetReleaseUpdater
             if (path.Split('\\').Any(part => part.Length == 0 || part.EndsWith(' ') || part.EndsWith('.') ||
                 part.IndexOfAny(invalidCharacters) >= 0))
             {
-                throw new InvalidDataException("美術資源包含有不支援的檔案路徑。");
+                throw new InvalidDataException("資源包含有不支援的檔案路徑。");
             }
 
             if (isDirectory)
@@ -219,7 +228,7 @@ internal static class AssetReleaseUpdater
                 (schemaVersion == SpineFrameCache.SchemaVersion && entry.Length > SpineFrameCache.MaximumSourceFileSize) ||
                 remaining < 0)
             {
-                throw new InvalidDataException("美術資源包含有不支援的檔案或超出大小上限。");
+                throw new InvalidDataException("資源包含有不支援的檔案或超出大小上限。");
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -241,7 +250,7 @@ internal static class AssetReleaseUpdater
 
             if (bytesLeft != 0)
             {
-                throw new InvalidDataException("美術資源包內的檔案大小與 ZIP 清單不符。");
+                throw new InvalidDataException("資源包內的檔案大小與 ZIP 清單不符。");
             }
         }
     }

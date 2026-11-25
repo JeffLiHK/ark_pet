@@ -4,13 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Media;
 
 namespace ArtPet.Windows.Media;
 
-internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
+internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? managedVoiceRoot)
 {
     private Task<VoiceLine[]>? _lines;
     private MediaPlayer? _player;
@@ -30,8 +29,8 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
     internal void Configure(string? characterId, string voiceLanguage, string subtitleLanguage)
     {
         Stop();
-        _lines = characterId == "hoolheyak"
-            ? Task.Run(() => ReadLines(voiceLanguage, subtitleLanguage))
+        _lines = characterId is not null && SpineFrameCache.IsIdentifier(characterId)
+            ? Task.Run(() => ReadLines(characterId, managedVoiceRoot, voiceLanguage, subtitleLanguage))
             : null;
     }
 
@@ -103,24 +102,36 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
         }
     }
 
-    private static VoiceLine[] ReadLines(string voiceLanguage, string subtitleLanguage)
+    private static VoiceLine[] ReadLines(string characterId, string? voiceRoot, string voiceLanguage, string subtitleLanguage)
     {
-        string root = Path.Combine(ProjectStorage.DataDirectory, "voices", "霍爾海雅");
+        string localRoot = Path.Combine(ProjectStorage.DataDirectory, VoiceAssets.DirectoryName);
+        string? managed = voiceRoot is null ? null : Path.Combine(voiceRoot, characterId);
+        string local = Path.Combine(localRoot, characterId);
+        string? legacy = characterId == ManagedCharacterAssets.LegacyPackId ? Path.Combine(localRoot, "霍爾海雅") : null;
+        string?[] roots = [managed, local, legacy];
+
+        string[] paths = roots.OfType<string>().Select(root => FindAudio(root, voiceLanguage))
+            .FirstOrDefault(files => files.Length > 0) ?? [];
+        if (paths.Length == 0)
+        {
+            return [];
+        }
+
+        var subtitles = subtitleLanguage == PetSettings.SubtitlesOff
+            ? null
+            : roots.OfType<string>()
+                .Select(root => ReadSubtitles(Path.Combine(root, subtitleLanguage, VoiceAssets.SubtitleFileName)))
+                .FirstOrDefault(lines => lines is { Count: > 0 });
+        return paths.Select(path => new VoiceLine(path,
+            subtitles?.GetValueOrDefault(Path.GetFileNameWithoutExtension(path).ToLowerInvariant()))).ToArray();
+    }
+
+    private static string[] FindAudio(string root, string language)
+    {
         try
         {
-            string[] paths = Directory.GetFiles(Path.Combine(root, voiceLanguage), "*.mp3");
-            if (paths.Length == 0)
-            {
-                return [];
-            }
-
-            var subtitles = subtitleLanguage == PetSettings.SubtitlesOff
-                ? null
-                : ReadSubtitles(Path.Combine(root, subtitleLanguage, "subtitles.json"));
-
-            return paths.Select(path => (Path: path, Id: Path.GetFileNameWithoutExtension(path).ToLowerInvariant()))
-                .Where(line => Regex.IsMatch(line.Id, @"\Acn_[0-9]{3}\z"))
-                .Select(line => new VoiceLine(line.Path, subtitles?.GetValueOrDefault(line.Id)))
+            return Directory.EnumerateFiles(Path.Combine(root, language), "*.mp3")
+                .Where(path => VoiceAssets.IsLineId(Path.GetFileNameWithoutExtension(path).ToLowerInvariant()))
                 .ToArray();
         }
         catch (Exception error) when (CharacterPack.IsAssetError(error))
@@ -133,7 +144,7 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle)
     {
         try
         {
-            return JsonSerializer.Deserialize<Dictionary<string, string?>>(File.ReadAllText(path));
+            return VoiceAssets.ReadSubtitles(path);
         }
         catch (Exception error) when (CharacterPack.IsAssetError(error) || error is JsonException)
         {
