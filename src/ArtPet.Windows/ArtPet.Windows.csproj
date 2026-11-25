@@ -8,7 +8,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Media/ArtPet.ico</ApplicationIcon>
     <Product>ArkPet</Product>
-    <Version>1.7.0</Version>
+    <Version>1.8.0</Version>
     <HoolheyakCharacterFolder>霍爾海雅</HoolheyakCharacterFolder>
     <ProjectAssetsDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets</ProjectAssetsDirectory>
     <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)\character.json')">$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)</HoolheyakPackDirectory>
