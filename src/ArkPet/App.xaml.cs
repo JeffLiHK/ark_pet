@@ -395,6 +395,7 @@ public partial class App : Application
             PreferFavoriteVoices = _settings.PreferFavoriteVoices,
             RememberDesktopLayout = _settings.RememberDesktopLayout,
             DesktopLayout = _settings.DesktopLayout,
+            DesktopConfigurations = _settings.DesktopConfigurations,
             DailyRotationEnabled = _settings.DailyRotationEnabled,
             RotationCandidates = _settings.RotationCandidates,
             DailyOutfit = _settings.DailyOutfit

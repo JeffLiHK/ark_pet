@@ -273,6 +273,9 @@ internal partial class MainInterfaceWindow : Window
 
     private void RefreshLayoutPage()
     {
+        SavedConfigurations.ItemsSource = _app.Settings.DesktopConfigurations;
+        NoConfigurations.Visibility = ShowWhen(_app.Settings.DesktopConfigurations.Length == 0);
+        SaveConfigurationControls.IsEnabled = SavedConfigurations.IsEnabled = !_app.ApplyingDesktopConfiguration;
         RememberLayout.IsChecked = _app.Settings.RememberDesktopLayout;
         RotationEnabled.IsChecked = _app.Settings.DailyRotationEnabled;
         RotationEnabled.IsEnabled = _app.InstalledPacks.Count > 0 || _app.Settings.DailyRotationEnabled;
@@ -288,6 +291,31 @@ internal partial class MainInterfaceWindow : Window
         RefreshRotationStatus();
         RefreshRotationOutfits();
         RefreshMissingCandidates();
+    }
+
+    private void SaveConfigurationClick(object sender, RoutedEventArgs e)
+    {
+        string name = ConfigurationName.Text.Trim();
+        string? error = _app.SaveDesktopConfiguration(name);
+        if (error is null)
+        {
+            ConfigurationName.Clear();
+            RefreshLayoutPage();
+        }
+        ConfigurationStatus.Text = error ?? $"已儲存「{name}」。";
+    }
+
+    private async void ApplyConfigurationClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: DesktopConfiguration configuration })
+        {
+            ConfigurationStatus.Text = $"正在套用「{configuration.Name}」…";
+            string? error = await _app.ApplyDesktopConfigurationAsync(configuration);
+            if (!_closed)
+            {
+                ConfigurationStatus.Text = error ?? $"已套用「{configuration.Name}」。";
+            }
+        }
     }
 
     private void RefreshMissingCandidates()

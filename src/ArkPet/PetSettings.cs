@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -42,6 +43,7 @@ internal sealed record PetSettings
 
     public bool RememberDesktopLayout { get; init; }
     public SavedPet[] DesktopLayout { get; init; } = [];
+    public DesktopConfiguration[] DesktopConfigurations { get; init; } = [];
     public bool DailyRotationEnabled { get; init; }
     public OutfitKey[] RotationCandidates { get; init; } = [];
     public DailyOutfit? DailyOutfit { get; init; }
@@ -71,8 +73,16 @@ internal sealed class PetSettingsStore(string filePath)
                         ? Array.FindAll(favorites, favorite => favorite is { CharacterId.Length: > 0, LineId.Length: > 0 })
                         : [],
                     DesktopLayout = settings.DesktopLayout is { } layout
-                        ? Array.FindAll(layout, pet => pet is { Slot: >= 0, Outfit.CharacterId.Length: > 0, Outfit.OutfitId.Length: > 0 })
+                        ? Array.FindAll(layout, IsSavedPet)
                         : [],
+                    DesktopConfigurations = (settings.DesktopConfigurations ?? [])
+                        .Where(configuration => configuration is { Pets: { Length: > 0 } } &&
+                            !string.IsNullOrWhiteSpace(configuration.Name) &&
+                            configuration.Name.Trim().Length <= DesktopConfiguration.MaxNameLength &&
+                            configuration.Pets.All(IsSavedPet) && configuration.Pets.Any(pet => pet.Slot == 0) &&
+                            configuration.Pets.DistinctBy(pet => pet.Slot).Count() == configuration.Pets.Length)
+                        .Select(configuration => configuration with { Name = configuration.Name.Trim() })
+                        .DistinctBy(configuration => configuration.Name, StringComparer.OrdinalIgnoreCase).ToArray(),
                     RotationCandidates = settings.RotationCandidates is { } candidates
                         ? Array.FindAll(candidates, outfit => outfit is { CharacterId.Length: > 0, OutfitId.Length: > 0 })
                         : [],
@@ -110,6 +120,9 @@ internal sealed class PetSettingsStore(string filePath)
 
         return new PetSettings();
     }
+
+    private static bool IsSavedPet(SavedPet pet) =>
+        pet is { Slot: >= 0, Outfit.CharacterId.Length: > 0, Outfit.OutfitId.Length: > 0 };
 
     internal bool TrySave(PetSettings settings)
     {

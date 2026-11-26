@@ -221,10 +221,18 @@ public partial class PetWindow : Window
         }
     }
 
-    internal void TurnAround()
+    internal bool IsFlipped => FacingTransform.ScaleX < 0;
+
+    internal void TurnAround() => SetFlipped(!IsFlipped);
+
+    internal void SetFlipped(bool flipped)
     {
+        if (IsFlipped == flipped)
+        {
+            return;
+        }
         PauseRoaming();
-        FacingTransform.ScaleX = -FacingTransform.ScaleX;
+        FacingTransform.ScaleX = flipped ? -1 : 1;
         DesktopStateChanged?.Invoke(this, EventArgs.Empty);
     }
 

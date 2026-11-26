@@ -17,6 +17,9 @@ public partial class App
 
     internal IReadOnlyList<string> LayoutNotices => _layoutNotices;
     internal string RotationStatus { get; private set; } = string.Empty;
+    internal bool ApplyingDesktopConfiguration { get; private set; }
+    internal bool CanSaveDesktopConfiguration => _desktopReady && !ApplyingDesktopConfiguration &&
+        _primary is not null && _pets.All(pet => pet.Session.Outfit is not null && pet.Session.PendingSelection is null);
 
     private async Task RestoreDesktopAsync(PetEntry primary, CancellationToken token)
     {
@@ -170,6 +173,7 @@ public partial class App
         if (saved is not null)
         {
             pet.Window.Topmost = saved.Topmost;
+            pet.Window.SetFlipped(saved.Flipped);
             pet.Window.SetPetInteraction(saved.AllowPetInteraction);
             ActivityArea activity = saved.Activity ?? new ActivityArea();
             pet.Window.SetActivityArea(Enum.IsDefined(activity.Scope) && Enum.IsDefined(activity.Corner)
@@ -181,6 +185,95 @@ public partial class App
             }
         }
         pet.Window.SetVisibilityPreference(saved?.Visible ?? true);
+    }
+
+    internal string? SaveDesktopConfiguration(string name)
+    {
+        name = name.Trim();
+        if (!CanSaveDesktopConfiguration)
+        {
+            return "請先為所有小人選擇造型並等候載入完成。";
+        }
+        if (name.Length is 0 or > DesktopConfiguration.MaxNameLength)
+        {
+            return $"請輸入 1 至 {DesktopConfiguration.MaxNameLength} 字元的配置名稱。";
+        }
+        if (_settings.DesktopConfigurations.Any(configuration =>
+            StringComparer.OrdinalIgnoreCase.Equals(configuration.Name, name)))
+        {
+            return "已有同名配置，請使用另一個名稱。";
+        }
+
+        PetSettings settings = _settings with
+        {
+            DesktopConfigurations = [.. _settings.DesktopConfigurations, new DesktopConfiguration(name, CaptureDesktopLayout())]
+        };
+        if (!_settingsStore.TrySave(settings))
+        {
+            return "無法寫入設定檔，請稍後再試。";
+        }
+
+        _settings = settings;
+        return null;
+    }
+
+    internal async Task<string?> ApplyDesktopConfigurationAsync(DesktopConfiguration configuration)
+    {
+        if (!_desktopReady || _primary is null || ApplyingDesktopConfiguration)
+        {
+            return "桌面小人正在載入，請稍後再試。";
+        }
+
+        ApplyingDesktopConfiguration = true;
+        CancellationToken token = _startup.Token;
+        var outfits = new Dictionary<OutfitKey, (CharacterPack Pack, LoadedOutfit Outfit)>();
+        try
+        {
+            _mainInterface?.Refresh();
+            foreach (OutfitKey key in configuration.Pets.Select(pet => pet.Outfit).Distinct())
+            {
+                using var session = new PetSession();
+                if (!await TryLoadOutfitAsync(session, key, token))
+                {
+                    return token.IsCancellationRequested ? null : $"無法載入「{key.CharacterId} / {key.OutfitId}」，請確認角色資源。桌面維持原配置。";
+                }
+                outfits.Add(key, (session.Pack!, session.Outfit!));
+            }
+            if (token.IsCancellationRequested || _exiting)
+            {
+                return null;
+            }
+
+            // All outfits are ready before changing the active pets.
+            Dictionary<int, PetEntry> existing = _pets.ToDictionary(pet => pet.Slot);
+            var slots = configuration.Pets.Select(pet => pet.Slot).ToHashSet();
+            foreach (PetEntry pet in existing.Values.Where(pet => !slots.Contains(pet.Slot)))
+            {
+                RemovePet(pet);
+            }
+            foreach (SavedPet saved in configuration.Pets.OrderBy(pet => pet.Slot))
+            {
+                if (!existing.TryGetValue(saved.Slot, out PetEntry? pet))
+                {
+                    pet = RegisterPet(new PetSession(), saved.Slot);
+                    pet.Window.SetVisibilityPreference(false);
+                }
+                var (pack, outfit) = outfits[saved.Outfit];
+                pet.Session.RestoreDecodedOutfit(pack, outfit);
+                RestorePetPosition(pet, saved);
+            }
+
+            SavePendingDesktop();
+            return null;
+        }
+        finally
+        {
+            ApplyingDesktopConfiguration = false;
+            if (!_exiting)
+            {
+                _mainInterface?.Refresh();
+            }
+        }
     }
 
     internal void SetRememberDesktop(bool enabled)
@@ -240,15 +333,28 @@ public partial class App
             return false;
         }
 
+        SavedPet[] layout = CaptureDesktopLayout(_settings.DesktopLayout);
+        if (layout.SequenceEqual(_settings.DesktopLayout))
+        {
+            return false;
+        }
+        _settings = _settings with { DesktopLayout = layout };
+        SaveSettings();
+        return true;
+    }
+
+    private SavedPet[] CaptureDesktopLayout(SavedPet[]? previousLayout = null)
+    {
         var layout = new List<SavedPet>();
         foreach (PetEntry pet in Pets)
         {
-            SavedPet? previous = _settings.DesktopLayout.FirstOrDefault(saved => saved.Slot == pet.Slot);
+            SavedPet? previous = previousLayout?.FirstOrDefault(saved => saved.Slot == pet.Slot);
             if (pet.Session is { Pack: { } pack, Outfit: { } outfit })
             {
                 layout.Add(new SavedPet(pet.Slot, new OutfitKey(pack.Id, outfit.Definition.Id),
                     pet.Window.CaptureDesktopPosition() ?? previous?.Position,
-                    pet.Window.Topmost, pet.Window.WantsVisible, pet.Window.Activity, pet.Window.AllowPetInteraction));
+                    pet.Window.Topmost, pet.Window.WantsVisible, pet.Window.Activity, pet.Window.AllowPetInteraction,
+                    pet.Window.IsFlipped));
             }
             else if (previous is not null)
             {
@@ -257,17 +363,12 @@ public partial class App
                     Visible = pet.Window.WantsVisible,
                     Topmost = pet.Window.Topmost,
                     Activity = pet.Window.Activity,
-                    AllowPetInteraction = pet.Window.AllowPetInteraction
+                    AllowPetInteraction = pet.Window.AllowPetInteraction,
+                    Flipped = pet.Window.IsFlipped
                 });
             }
         }
-        if (layout.SequenceEqual(_settings.DesktopLayout))
-        {
-            return false;
-        }
-        _settings = _settings with { DesktopLayout = [.. layout] };
-        SaveSettings();
-        return true;
+        return [.. layout];
     }
 
     private void SaveSettings()

@@ -22,6 +22,7 @@ internal sealed class PetSession : IDisposable
 
     internal void RestoreDecodedOutfit(CharacterPack pack, LoadedOutfit outfit)
     {
+        CancelSelection();
         Pack = pack;
         Outfit = outfit;
         Changed?.Invoke(this, EventArgs.Empty);
@@ -93,7 +94,9 @@ internal sealed class PetSession : IDisposable
         }
     }
 
-    public void Dispose()
+    public void Dispose() => CancelSelection();
+
+    private void CancelSelection()
     {
         _request?.Cancel();
         _request = null;

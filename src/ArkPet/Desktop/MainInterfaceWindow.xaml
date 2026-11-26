@@ -313,6 +313,45 @@
                         <TextBlock Text="桌面配置" Style="{StaticResource Heading}" />
                         <Border Style="{StaticResource Panel}">
                             <StackPanel>
+                                <TextBlock Text="已儲存的小人配置" Style="{StaticResource Label}" />
+                                <TextBlock Text="儲存所有小人的造型、位置與個別設定，之後可一鍵套用。"
+                                           Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                <TextBlock Text="配置名稱" Style="{StaticResource Label}" />
+                                <Grid x:Name="SaveConfigurationControls">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="ConfigurationName" AutomationProperties.Name="配置名稱" MaxLength="40"
+                                             ToolTip="配置名稱" MinHeight="32" VerticalContentAlignment="Center"
+                                             FocusVisualStyle="{StaticResource FocusRing}" Margin="0,0,8,4" />
+                                    <Button Grid.Column="1" Content="儲存目前配置" Click="SaveConfigurationClick" />
+                                </Grid>
+                                <TextBlock x:Name="ConfigurationStatus" Foreground="{StaticResource Accent}" TextWrapping="Wrap"
+                                           AutomationProperties.LiveSetting="Polite" />
+                                <TextBlock x:Name="NoConfigurations" Text="尚未儲存任何配置。" Foreground="{StaticResource Muted}"
+                                           Margin="0,8,0,0" />
+                                <ItemsControl x:Name="SavedConfigurations" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,0,0,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Name}" TextWrapping="Wrap" VerticalAlignment="Center"
+                                                           Margin="0,0,8,4" />
+                                                <Button Grid.Column="1" Content="套用" Click="ApplyConfigurationClick"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat=套用 {0}}"
+                                                        Style="{StaticResource PrimaryButton}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Panel}">
+                            <StackPanel>
                                 <CheckBox x:Name="RememberLayout" Content="記住桌面配置" Click="RememberLayoutClick" />
                                 <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap"
                                            Text="下次啟動時恢復小人、造型和桌面位置。" />
