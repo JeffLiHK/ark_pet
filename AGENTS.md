@@ -20,15 +20,15 @@ Run commands from the repository root on Windows with the .NET 10.0.4xx SDK spec
 
 開發版優先從 `local-data/assets/霍爾海雅` 載入預設造型、精英二立繪、歷世流風和恆久祭禮。精英二有自己的立繪，並共用預設造型的基建模型與動畫。舊版 `local-data/assets/hoolheyak/desktop-60` 和 `desktop` 仍可載入，沒有可用造型時，可從通知區開啟設定或衣櫃。
 
-- 畫布預設為 160 DIP，在主螢幕工作區右下角，離右邊及底部各 16 DIP，並置頂。
-- 顯示或換裝時先播 Idle。每個待機動作預設完整循環 12 次，再淡化過渡到另一個動作。Move 會在桌面原位播放。短按互動結束後會回到原待機動作。
+- 100% 縮放時，桌面模型依待機畫面的可見高度調整至約 90 DIP。小人預設出現在主螢幕工作區右下角，並置頂。
+- 顯示或換裝時先播 Idle。待機循環以 12 次為預設基準，每段會隨機選擇循環次數和下一個動作。抽到同一動作時會接著播放，換動作時淡化過渡。Move 會在桌面原位播放。短按互動結束後會回到原待機動作。
 - 安裝完整資源包後，短按霍爾海雅會隨機播放一條語音，預設使用日語配音與繁體中文字幕。 [語音與字幕](docs/hoolheyak-voice.md)
 - 按住可將角色拖到螢幕邊緣或拖出螢幕。右鍵可開衣櫃、切換置頂或隱藏。衣櫃以立繪顯示角色列表，可按角色名稱搜尋，選擇角色後可查看各造型的模型預覽和立繪。
-- 右鍵選「轉身」可水平翻轉目前小人。在「設定 → 一般」開啟自由模式後，有 Move 動畫的小人會在目前螢幕的工作區散步，走到左右邊緣時有機會轉身折返。散步途中會停下發呆，有 Sleep 動畫的造型偶爾會停下睡覺。可調整「自由模式步速」為預設慢步的 50%–150%。互動期間會暫停走動。
+- 右鍵選「轉身」可水平翻轉目前小人。在「設定 → 一般」開啟自由模式後，小人會依造型可用的動畫，隨機選擇散步、發呆、坐下或睡覺。每段行走的方向、距離和步速，以及停留時間都會變動。可調整「自由模式步速」為預設慢步的 50%–150%。互動期間會暫停走動。
 - 在「設定 → 一般」開啟「物理模式」後，把小人拖到半空中再放開，就會落到可見的視窗上緣、工作列上緣或螢幕底部。有坐姿或睡姿的造型會在對應的位置休息。若也開啟自由模式，小人會沿著支撐面散步，走出邊緣時繼續下落。
 - 從小人右鍵選單或通知區選「新增一隻小人」，會新增相同造型的小人。每隻可獨立換裝、拖曳和隱藏。通知區的「管理小人」可找回隱藏的小人或移除新增的小人。重新啟動時從一隻小人開始。
-- 右鍵選單和工作列通知區都可開啟設定視窗。「一般」可調整縮放、幀率、待機循環次數和互動模式，也可為目前 Windows 使用者啟用登入時啟動。「外觀」可分別調整高亮描邊和陰影。「語音與字幕」可調整配音、字幕和語音音量，音量設為 0% 即靜音。循環次數可直接輸入，按 Enter 或離開欄位即可套用。畫面與語音偏好會自動保存到 `local-data/settings.json`。關閉互動模式後，滑鼠會穿透角色，仍可從通知區開設定恢復。
-- 在「設定 → 資源管理」按「更新全部模型」，程式會下載所有官方角色的素材、圖示和字幕。資源管理沿用角色和造型卡片，可手動建置或刪除動畫影格。在衣櫃套用造型時也可按需生成影格。普通話配音可在資源管理獨立下載或刪除。新版模型清單於下次啟動在衣櫃生效。「檢查程式更新」可另外更新 Windows x64 自包含程式。程式會以 GitHub 提供的 SHA-256 驗證下載檔案。
+- 右鍵選單和工作列通知區都可開啟設定視窗。「一般」可調整縮放、幀率、待機循環基準和互動模式，也可為目前 Windows 使用者啟用登入時啟動。「外觀」可分別調整高亮描邊和陰影。「語音與字幕」可調整配音、字幕和語音音量，音量設為 0% 即靜音。循環次數可直接輸入，按 Enter 或離開欄位即可套用。畫面與語音偏好會自動保存到 `local-data/settings.json`。關閉互動模式後，滑鼠會穿透角色，仍可從通知區開設定恢復。
+- 「設定 → 一般」的「模型建構硬件加速」預設開啟，產生新影格時會優先使用 GPU，失敗時回退至軟件渲染。關閉後會直接用軟件渲染。可在「設定 → 資源管理」按「更新全部模型」，程式會下載所有官方角色的素材、圖示和字幕。資源管理沿用角色和造型卡片，可手動建置或刪除動畫影格。在衣櫃套用造型時也可按需生成影格。普通話配音可在資源管理獨立下載或刪除。新版模型清單於下次啟動在衣櫃生效。「檢查程式更新」可另外更新 Windows x64 自包含程式。程式會以 GitHub 提供的 SHA-256 驗證下載檔案。
 - 從通知區的 **ArkPet** 圖示可開衣櫃、顯示、隱藏、切換置頂、移回主螢幕右下角或結束。找不到圖示時，展開通知區的隱藏圖示。雙擊圖示會顯示角色。
 - 造型、位置、置頂及顯示狀態在當次執行期間有效。再次啟動會套用預設造型和桌面位置。同一 Windows 登入工作階段只會執行一個實例。
 
@@ -145,12 +145,12 @@ The solution currently has no automated test project or coverage gate. [The acce
 - 在 Windows 11 Pro、125% 顯示比例下啟動自包含 EXE，確認預設造型待機、透明區實際點擊穿透、短按播放互動、拖曳、右鍵開衣櫃、原地切換兩套造型及退出。
 - 實際從右鍵設定切換到 125% 和 60 FPS，重啟後恢復選擇，再從選單切回 30 FPS。程式內測試確認兩個幀率選項有不同的畫面更新頻率，拖曳後縮放時會保持角色的腳底錨點。
 - 程式內測試確認衣櫃切換造型時位置不變，快速切換以最後一次選擇為準，隱藏時停止動畫且仍可從衣櫃換裝。也驗證了成品內素材損毀時會嘗試本機素材。
-- 兩套造型均已用程式驗證四段待機動作皆可播到，連續輪播不重複，且 Interact 可中斷 Sleep 並回到待機。舊素材仍可循環播放 Idle。
+- 兩套造型均已用程式驗證四段待機動作皆可播到，且 Interact 可中斷 Sleep 並回到待機。舊素材仍可循環播放 Idle。
 - 新版素材包共有四張衣櫃卡和三套獨立模型。三套模型各有五段動畫，共 2,898 張影格。Windows 版已驗證逐套切換、立繪和圖示載入，以及換裝時保留桌面位置。素材檢查會核對清單指定的影格。
 
 ## 視窗與滑鼠
 
-桌面視窗沿用 C#／.NET 10 與 WPF，以 `WindowStyle=None`、`AllowsTransparency=true` 和透明底建立分層視窗。Windows 讓零 Alpha 像素的滑鼠事件穿透。`ShowActivated=false` 和 `WM_MOUSEACTIVATE` 回傳 `MA_NOACTIVATE`，讓角色接收點擊而保留目前的前景視窗。置頂交給 WPF `Topmost`。 [Win32 分層視窗](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#layered-windows) · [滑鼠啟用訊息](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mouseactivate)
+桌面視窗沿用 C#／.NET 10 與 WPF，以 `WindowStyle=None`、`AllowsTransparency=true` 和透明底建立分層視窗。Windows 讓零 Alpha 像素的滑鼠事件穿透。`ShowActivated=false` 和 `WM_MOUSEACTIVATE` 回傳 `MA_NOACTIVATE`，讓角色接收點擊而保留目前的前景視窗。每隻小人以 WPF `Topmost` 記錄置頂選擇，並在原生視窗的置頂狀態偏離時修正。 [Win32 分層視窗](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#layered-windows) · [滑鼠啟用訊息](https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mouseactivate)
 
 按下主鍵後，寵物按畫面更新節奏追蹤按鍵與游標。超過 Windows 的拖曳門檻後，用 `SetWindowPos` 在實體像素座標移動並保留前景。短按放開時用 `WindowFromPoint` 確認命中角色。Per-Monitor V2 用於跨螢幕 DPI 切換。 [程式架構](docs/architecture.md#桌面互動與動畫)
 
@@ -162,5 +162,7 @@ The solution currently has no automated test project or coverage gate. [The acce
 養成和工作提醒保留為後續產品方向。第一版以安靜陪伴為主。
 
 ## Commits and Pull Requests
+
+After completing and verifying each task that changes repository files, commit the task changes and push the current branch to its upstream remote before reporting completion. Leave unrelated working-tree changes out of the commit. Follow any explicit instruction to skip committing or pushing for the current task.
 
 Keep commits focused and use descriptive subjects such as `feat: add wardrobe outfit switching` or `fix: recover from invalid animation metadata`. Stage files by explicit path and review `git diff --cached --name-status`. In pull requests, summarize the change, record verification, link related issues when available, and include screenshots for visible UI changes.

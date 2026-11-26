@@ -24,6 +24,8 @@ public partial class PetWindow : Window
 {
     private const int CornerMarginDip = 16;
     private const double DefaultSizeDip = 160;
+    private const double DefaultRestingHeightDip = 90;
+    private const double MaxArtworkScale = 1.5;
     private const int GesturePollIntervalMs = 8;
     private const int EffectPaddingDip = 16;
     private readonly FramePlayer _player;
@@ -37,8 +39,10 @@ public partial class PetWindow : Window
     private Timer? _gestureTimer;
     private bool _dragging;
     private bool _placementCheckPending;
+    private bool _topmostCheckQueued;
     private ScaleAnchor _scaleAnchor = new(0.5, 0.91);
     private Rect _artworkBounds = new(0, 0, 1, 1);
+    private double _artworkScale = 1;
     private int _effectPadding;
 
     public PetWindow() : this(0)
@@ -89,7 +93,7 @@ public partial class PetWindow : Window
         _voice.SetVolume(settings.VoiceVolumePercent);
         _player.FramesPerSecond = settings.AnimationFps;
         _player.IdleLoopsPerAction = settings.IdleLoopsPerAction;
-        ResizePet(DefaultSizeDip * settings.SizePercent / PetSettings.DefaultSize);
+        ResizePet();
         if (physicsModeChanged)
         {
             ResetPhysicsPosition();
@@ -162,21 +166,15 @@ public partial class PetWindow : Window
 
     internal void SetOutfit(LoadedOutfit outfit)
     {
-        PauseRoaming();
-        bool wasSupported = _support is not null;
-        double previousBottom = _artworkBounds.Bottom;
+        ScaleAnchor previousAnchor = GetResizeAnchor();
         ResetPhysicsPosition();
-        _voice.Stop();
         _scaleAnchor = outfit.Anchor;
-        Rect artwork = ArtworkBounds.FromFrame(outfit.Idle.Frames[0]);
-        // An idle clip can start with a blank frame.
+        Rect artwork = outfit.RestingBounds;
         _artworkBounds = artwork.IsEmpty ? new Rect(0, 0, 1, 1) : artwork;
-        if (wasSupported && NativeMethods.GetWindowRect(_handle, out WindowBounds bounds))
-        {
-            double padding = _effectPadding * NativeMethods.GetDpiForWindow(_handle) / 96.0;
-            int offset = (int)Math.Round((previousBottom - _artworkBounds.Bottom) * (bounds.Height - 2 * padding));
-            MovePet(bounds, bounds.Left, bounds.Top + offset);
-        }
+        // Limit canvas growth for sparse assets and fit wide idle poses within one placement slot.
+        _artworkScale = artwork.IsEmpty ? 1 : Math.Min(MaxArtworkScale,
+            Math.Min(DefaultRestingHeightDip / (DefaultSizeDip * artwork.Height), 1 / artwork.Width));
+        ResizePet(previousAnchor);
 
         _player.SetOutfit(outfit, IsVisible);
         RefreshRoaming();
@@ -234,6 +232,7 @@ public partial class PetWindow : Window
         RecoverPlacement();
         Show();
         RecoverPlacement();
+        NativeMethods.EnsureTopmost(_handle, Topmost);
         if (!Topmost)
         {
             NativeMethods.BringForward(_handle);
@@ -265,10 +264,35 @@ public partial class PetWindow : Window
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (e.Property == TopmostProperty && VoiceBubble?.IsOpen == true)
+        if (e.Property == TopmostProperty)
         {
-            ConfigureVoiceBubble(this, EventArgs.Empty);
+            QueueTopmostCheck();
+            if (VoiceBubble?.IsOpen == true)
+            {
+                ConfigureVoiceBubble(this, EventArgs.Empty);
+            }
         }
+    }
+
+    private void QueueTopmostCheck()
+    {
+        if (_topmostCheckQueued || _handle == IntPtr.Zero || !IsVisible ||
+            NativeMethods.IsTopmost(_handle) == Topmost)
+        {
+            return;
+        }
+
+        // Let WPF and Win32 finish the current z-order change before restoring the requested state.
+        _topmostCheckQueued = true;
+        Dispatcher.InvokeAsync(() =>
+        {
+            if (_handle != IntPtr.Zero && IsVisible)
+            {
+                NativeMethods.EnsureTopmost(_handle, Topmost);
+            }
+
+            _topmostCheckQueued = false;
+        });
     }
 
     private void ConfigureVoiceBubble(object? sender, EventArgs e)
@@ -312,6 +336,11 @@ public partial class PetWindow : Window
         {
             handled = true;
             return NativeMethods.NoActivate;
+        }
+
+        if (message == NativeMethods.WindowPositionChanged)
+        {
+            QueueTopmostCheck();
         }
 
         if ((message == NativeMethods.DpiChanged && _press is null) ||
@@ -363,13 +392,27 @@ public partial class PetWindow : Window
         {
             // Keep the corner anchor through the DPI change if this move crosses monitors.
             _atPrimaryCorner = true;
-            int margin = (int)Math.Round((CornerMarginDip - _effectPadding) * NativeMethods.GetDpiForWindow(_handle) / 96.0);
+            double dpiScale = NativeMethods.GetDpiForWindow(_handle) / 96.0;
+            int gap = (int)Math.Round(CornerMarginDip * dpiScale);
+            double padding = _effectPadding * dpiScale;
+            int slotSize = (int)Math.Ceiling(BaseSizeDip * dpiScale + 2 * padding);
+            int stride = slotSize + gap;
             var work = NativeMethods.GetWorkingArea(primary.Bounds.Location) ?? primary.WorkingArea;
-            int gap = (int)Math.Round(CornerMarginDip * NativeMethods.GetDpiForWindow(_handle) / 96.0);
-            int columns = Math.Max(1, (work.Width - margin * 2 + gap) / (bounds.Width + gap));
-            int rows = Math.Max(1, (work.Height - margin * 2 + gap) / (bounds.Height + gap));
-            int x = Math.Max(work.Left, work.Right - bounds.Width - margin - _placementSlot % columns * (bounds.Width + gap));
-            int y = Math.Max(work.Top, work.Bottom - bounds.Height - margin - (_placementSlot / columns % rows) * (bounds.Height + gap));
+            int columns = Math.Max(1, (work.Width - gap) / stride);
+            int rows = Math.Max(1, (work.Height - gap) / stride);
+            double slotCenterX = Math.Max(work.Left, work.Right - (_placementSlot % columns + 1) * stride) + slotSize / 2.0;
+            double slotCenterY = Math.Max(work.Top, work.Bottom - (_placementSlot / columns % rows + 1) * stride) + slotSize / 2.0;
+
+            // Center visible artwork in each shared slot regardless of the canvas size.
+            double artworkCenterX = _artworkBounds.X + _artworkBounds.Width / 2;
+            double artworkCenterY = _artworkBounds.Y + _artworkBounds.Height / 2;
+            if (FacingTransform.ScaleX < 0)
+            {
+                artworkCenterX = 1 - artworkCenterX;
+            }
+
+            int x = (int)Math.Round(slotCenterX - padding - artworkCenterX * (bounds.Width - 2 * padding));
+            int y = (int)Math.Round(slotCenterY - padding - artworkCenterY * (bounds.Height - 2 * padding));
             MovePet(bounds, x, y);
         }
     }
@@ -392,11 +435,17 @@ public partial class PetWindow : Window
         });
     }
 
-    private void ResizePet(double size)
+    private double BaseSizeDip => DefaultSizeDip * Settings.SizePercent / PetSettings.DefaultSize;
+
+    private ScaleAnchor GetResizeAnchor() => new(
+        FacingTransform.ScaleX < 0 ? 1 - _scaleAnchor.X : _scaleAnchor.X,
+        Settings.PhysicsModeEnabled ? _artworkBounds.Bottom : _scaleAnchor.Y);
+
+    private void ResizePet(ScaleAnchor? previousAnchor = null)
     {
         int padding = Settings.OutlineLevel > 0 || Settings.ShadowLevel > 0 ? EffectPaddingDip : 0;
-        double windowSize = size + 2 * padding;
-        if (Width == windowSize && Height == windowSize && _effectPadding == padding)
+        double windowSize = BaseSizeDip * _artworkScale + 2 * padding;
+        if (previousAnchor is null && Width == windowSize && Height == windowSize && _effectPadding == padding)
         {
             return;
         }
@@ -415,11 +464,15 @@ public partial class PetWindow : Window
 
         if (keepAnchor && NativeMethods.GetWindowRect(_handle, out WindowBounds resized))
         {
-            double paddingChange = (oldPadding - padding) * NativeMethods.GetDpiForWindow(_handle) / 96.0;
-            double anchorX = FacingTransform.ScaleX < 0 ? 1 - _scaleAnchor.X : _scaleAnchor.X;
-            int x = previous.Left + (int)Math.Round(paddingChange + (previous.Width - resized.Width - 2 * paddingChange) * anchorX);
-            double anchorY = Settings.PhysicsModeEnabled ? _artworkBounds.Bottom : _scaleAnchor.Y;
-            int y = previous.Top + (int)Math.Round(paddingChange + (previous.Height - resized.Height - 2 * paddingChange) * anchorY);
+            ScaleAnchor anchor = GetResizeAnchor();
+            ScaleAnchor oldAnchor = previousAnchor ?? anchor;
+            double dpiScale = NativeMethods.GetDpiForWindow(_handle) / 96.0;
+            double oldPaddingPixels = oldPadding * dpiScale;
+            double paddingPixels = padding * dpiScale;
+            int x = previous.Left + (int)Math.Round(oldPaddingPixels + (previous.Width - 2 * oldPaddingPixels) * oldAnchor.X
+                - paddingPixels - (resized.Width - 2 * paddingPixels) * anchor.X);
+            int y = previous.Top + (int)Math.Round(oldPaddingPixels + (previous.Height - 2 * oldPaddingPixels) * oldAnchor.Y
+                - paddingPixels - (resized.Height - 2 * paddingPixels) * anchor.Y);
             MovePet(resized, x, y);
         }
 

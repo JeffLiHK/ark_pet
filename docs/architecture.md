@@ -50,7 +50,7 @@ flowchart LR
 
 **摸摸與拖曳。** 主鍵按下時記錄螢幕座標，超過 Windows 的拖曳閾值才移動。短按放開時以 `WindowFromPoint` 確認游標仍位於小人的可見區域。按下和放開皆命中小人，且位移低於閾值時觸發摸摸。由於背景視窗的滑鼠擷取範圍有限，從按下到完成手勢期間，以短時的 `DispatcherTimer` 讀取游標及 Windows 主鍵對應的實體按鍵。移動用 `SetWindowPos` 的 `SWP_NOACTIVATE` 保持前景視窗。放開、隱藏或結束時停止手勢計時。所有放開路徑走同一個完成方法，避免重複觸發和拖曳後誤播動畫。[Win32 滑鼠擷取](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setcapture) · [讀取滑鼠按鍵狀態](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getasynckeystate)
 
-**螢幕位置。** WPF 以 DIP 設定視窗大小與內容，桌面位置與拖曳換算使用 Win32 實體像素。在 `app.manifest` 宣告 Per-Monitor V2 DPI awareness，依螢幕工作區與實際視窗尺寸限制放置範圍。記錄顯示器名稱與角色錨點在工作區的比例，換裝和縮放以同一錨點放置，容許靠邊時回到可見範圍。預設為主螢幕右下角、距工作區邊緣各 16 DIP、100% 時畫布長邊為 160 DIP，依素材比例顯示，縮放可選 25% 至 300%，每級相差 25 個百分點，置頂預設開啟。螢幕配置、DPI 變更或從通知區叫回時重新檢查放置位置，副螢幕拔除時回主螢幕右下角。[Per-Monitor V2](https://learn.microsoft.com/en-us/windows/win32/hidpi/dpi-awareness-context) · [螢幕工作區座標](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-monitorinfo)
+**螢幕位置。** WPF 以 DIP 設定視窗大小與內容，桌面位置與拖曳換算使用 Win32 實體像素。在 `app.manifest` 宣告 Per-Monitor V2 DPI awareness，依螢幕工作區與實際視窗尺寸限制放置範圍。記錄顯示器名稱與角色錨點在工作區的比例，換裝和縮放以同一錨點放置，容許靠邊時回到可見範圍。小人預設置頂，並排列於主螢幕工作區右下角。100% 時，以待機畫面的可見高度約 90 DIP 為目標，等比例縮放整套動畫。稀疏或過寬的模型受畫布大小和排列空間限制。縮放可選 25% 至 300%，每級相差 25 個百分點。螢幕配置、DPI 變更或從通知區叫回時重新檢查放置位置，副螢幕拔除時回主螢幕右下角。[Per-Monitor V2](https://learn.microsoft.com/en-us/windows/win32/hidpi/dpi-awareness-context) · [螢幕工作區座標](https://learn.microsoft.com/en-us/windows/win32/api/winuser/ns-winuser-monitorinfo)
 
 **播放。** `AnimationPlayer` 循環播放 `idle`，點擊時插入一次 `touch`，結束後從頭播放 `idle`。缺少 `touch` 時，在待機上疊一個約半秒的 WPF 微風特效。反應期間的連點共用當前反應。動畫預設且最高為 24 FPS。可見時用單一 `DispatcherTimer` 依 `Stopwatch` 計算下一幀的絕對時間並設定下次喚醒。延遲時直接取當前影格，角色圖像只在造型、片段或影格索引變更時更新。隱藏時停止計時，叫回時從待機開始。[WPF DispatcherTimer 的調度行為](https://learn.microsoft.com/en-us/dotnet/api/system.windows.threading.dispatchertimer?view=windowsdesktop-10.0)
 
@@ -83,7 +83,7 @@ flowchart LR
 }
 ```
 
-- **影格規格。** 每段從 `0000.png` 開始依序命名。例如 `default/idle/0000.png`，依 `frameCount` 讀取所列序列。目錄和預覽路徑相對於角色資料夾，解析後須位於該資料夾內。第 1 版清單需有非空白 ID，造型 ID 唯一，預設造型存在，畫布尺寸為正且錨點在畫布內。降採樣前核對 PNG 的原始尺寸是否符合畫布，驗證幀率介於 1 至 24 FPS、影格數為正且影格可解碼。每套以 `idle` 為必要片段。`touch` 缺失或讀取失敗時用微風，`preview` 缺失或讀取失敗時優先用待機首幀。必要片段無法載入時才將該造型標為暫不可用。
+- **影格規格。** 每段從 `0000.png` 開始依序命名。例如 `default/idle/0000.png`，依 `frameCount` 讀取所列序列。目錄和預覽路徑相對於角色資料夾，解析後須位於該資料夾內。第 1 版清單需有非空白 ID，造型 ID 唯一，預設造型存在，畫布尺寸為正且錨點在畫布內。核對 PNG 的原始尺寸是否符合畫布，並以原始尺寸解碼動畫影格，驗證幀率介於 1 至 24 FPS、影格數為正且影格可解碼。每套以 `idle` 為必要片段。`touch` 缺失或讀取失敗時用微風，`preview` 缺失或讀取失敗時優先用待機首幀。必要片段無法載入時才將該造型標為暫不可用。
 - **素材準備。** 依原素材的使用條件準備本機透明 PNG 序列。若手上是 Spine 骨架檔，使用相符版本的工具讀取骨架、圖集和貼圖，輸出每個動作的透明序列，再將兩套影格對齊同一畫布。Esoteric Software 的 Spine Editor／CLI 提供匯入和匯出功能，影像匯出需要具視窗系統和 OpenGL 的環境。PRTS 是參考索引。霍爾海雅預設基建資料已有索引，「歷世流風」的可用基建素材尚待實際驗證。[Spine CLI](https://esotericsoftware.com/spine-command-line-interface) · [霍爾海雅基建索引](https://prts.wiki/w/霍尔海雅/spine)
 - **載入與換裝。** 選擇新素材資料夾後，先驗證清單並載入預設造型，才一起更新角色、衣櫃和目前的素材路徑，接著排程保存設定。驗證期間保持原來的小人和衣櫃可用。已有角色時沿用目前的顯示或隱藏狀態。衣櫃選擇時，由背景工作用 WPF `BitmapImage` 的 `OnLoad` 完成解碼並 `Freeze()`，關閉檔案後交回 UI。候選造型整套準備好才在同一次 UI 更新中切換並進入新造型的待機。讀取失敗時繼續顯示目前造型。連續換裝時同時只解碼一套候選，取消過時要求，最後一次選擇才可套用。持久設定以成功套用後的時裝為準。[BitmapImage 載入選項](https://learn.microsoft.com/en-us/dotnet/api/system.windows.media.imaging.bitmapimage.cacheoption?view=windowsdesktop-10.0) · [WPF 可凍結物件](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/advanced/freezable-objects-overview)
 - **同時操作。** 資料夾與換裝請求共用單一載入流程，帶有請求序號，UI 只套用最新的使用者請求。選回目前穿著的時裝時取消待處理的選擇。跨 DPI 重解碼優先讓手動選擇完成，之後再按顯示尺寸調整目前造型，只在角色、造型和目標尺寸仍相符時更新影格。關閉衣櫃或隱藏小人時，已發出的換裝可以完成。結束程式時取消載入。

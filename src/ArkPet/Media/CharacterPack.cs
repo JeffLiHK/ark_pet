@@ -6,7 +6,9 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 using System.Windows.Media.Imaging;
+using ArtPet.Windows.Desktop;
 
 namespace ArtPet.Windows.Media;
 
@@ -15,8 +17,6 @@ internal sealed class CharacterPack
     internal const int SupportedSchemaVersion = 1;
     private const string CharacterFolder = "霍爾海雅";
     private const string LegacyCharacterFolder = "hoolheyak";
-    // Keep a 250-pixel canvas for the longest bundled outfit at 125% scale on a 125% display.
-    private const long OutfitDecodedBytesBudget = 300L * 1024 * 1024;
     private const int MaximumOutfitFrames = 4096;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly string _directory;
@@ -93,8 +93,8 @@ internal sealed class CharacterPack
 
     internal bool IsOutfitReady(OutfitDefinition outfit) => Models?.IsOutfitBuilt(outfit) ?? true;
 
-    internal Task<LoadedOutfit> LoadOutfitAsync(OutfitDefinition outfit, CancellationToken token) =>
-        Models is { } models ? models.LoadAsync(outfit, token) : Task.FromResult(LoadOutfit(outfit, token));
+    internal Task<LoadedOutfit> LoadOutfitAsync(OutfitDefinition outfit, bool hardwareAcceleration, CancellationToken token) =>
+        Models is { } models ? models.LoadAsync(outfit, hardwareAcceleration, token) : Task.FromResult(LoadOutfit(outfit, token));
 
     private static IEnumerable<string> FindCharacterDirectories(string assets)
     {
@@ -135,9 +135,15 @@ internal sealed class CharacterPack
         }
     }
 
-    internal void ValidateArtwork(CancellationToken token)
+    internal void ValidateArtwork(CancellationToken token, OutfitDefinition? decodedOutfit = null)
     {
         var checkedClips = new HashSet<ClipDefinition>();
+        if (decodedOutfit is { } decoded)
+        {
+            checkedClips.UnionWith(new[] { decoded.Idle, decoded.Touch, decoded.Move, decoded.Sit, decoded.Sleep }
+                .OfType<ClipDefinition>());
+        }
+
         foreach (OutfitDefinition outfit in Outfits)
         {
             if (outfit.Idle is null)
@@ -160,7 +166,7 @@ internal sealed class CharacterPack
                     for (int index = 0; index < clip.FrameCount; index++)
                     {
                         token.ThrowIfCancellationRequested();
-                        DecodeFrame(clip, index, _canvas.Width);
+                        DecodeFrame(clip, index);
                     }
                 }
             }
@@ -186,11 +192,10 @@ internal sealed class CharacterPack
             try
             {
                 // Only idle is required. Validate every frame without retaining a full animation.
-                int decodeWidth = GetDecodeWidth(idle.FrameCount);
                 for (int index = 0; index < idle.FrameCount; index++)
                 {
                     token.ThrowIfCancellationRequested();
-                    DecodeFrame(idle, index, decodeWidth);
+                    DecodeFrame(idle, index);
                 }
 
                 return outfit;
@@ -203,7 +208,7 @@ internal sealed class CharacterPack
         return null;
     }
 
-    internal LoadedOutfit LoadOutfit(OutfitDefinition outfit, CancellationToken cancellationToken)
+    internal LoadedOutfit LoadOutfit(OutfitDefinition outfit, CancellationToken cancellationToken, bool requireAllClips = false)
     {
         if (!IsValidClip(outfit.Idle))
         {
@@ -224,15 +229,13 @@ internal sealed class CharacterPack
             }
         }
 
-        int decodeWidth = GetDecodeWidth(frameCount);
-
-        var idleClips = new List<FrameClip>(variations.Count + 1) { DecodeClip(idleDefinition, decodeWidth, cancellationToken) };
+        var idleClips = new List<FrameClip>(variations.Count + 1) { DecodeClip(idleDefinition, cancellationToken) };
         FrameClip? move = null;
         FrameClip? sit = null;
         FrameClip? sleep = null;
         foreach (ClipDefinition variation in variations)
         {
-            if (DecodeOptionalClip(variation, decodeWidth, cancellationToken) is { } loaded)
+            if (DecodeOptionalClip(variation, cancellationToken, requireAllClips) is { } loaded)
             {
                 idleClips.Add(loaded);
                 if (ReferenceEquals(variation, outfit.Move))
@@ -250,8 +253,11 @@ internal sealed class CharacterPack
             }
         }
 
-        FrameClip? touch = touchDefinition is null ? null : DecodeOptionalClip(touchDefinition, decodeWidth, cancellationToken);
-        var anchor = new System.Windows.Point((double)_canvas.AnchorX / _canvas.Width, (double)_canvas.AnchorY / _canvas.Height);
+        FrameClip? touch = touchDefinition is null ? null : DecodeOptionalClip(touchDefinition, cancellationToken, requireAllClips);
+        Rect frameArea = ArtworkBounds.FrameArea(idleClips[0].Frames[0]);
+        var anchor = new System.Windows.Point(
+            frameArea.X + frameArea.Width * _canvas.AnchorX / _canvas.Width,
+            frameArea.Y + frameArea.Height * _canvas.AnchorY / _canvas.Height);
         BitmapSource? icon = null;
         if (!string.IsNullOrWhiteSpace(outfit.Icon))
         {
@@ -264,7 +270,18 @@ internal sealed class CharacterPack
                 // The desktop can derive an icon from the outfit preview.
             }
         }
-        return new LoadedOutfit(outfit, idleClips, touch, anchor, LoadPreview(outfit), move, sleep, icon, sit);
+        Rect restingBounds = Rect.Empty;
+        foreach (BitmapSource frame in idleClips[0].Frames)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            restingBounds = ArtworkBounds.FromFrame(frame);
+            if (!restingBounds.IsEmpty)
+            {
+                break;
+            }
+        }
+
+        return new LoadedOutfit(outfit, idleClips, touch, anchor, restingBounds, LoadPreview(outfit), move, sleep, icon, sit);
     }
 
     internal BitmapSource? LoadPortrait(OutfitDefinition outfit)
@@ -327,56 +344,42 @@ internal sealed class CharacterPack
         clip is { Fps: >= 1 and <= 60, FrameCount: > 0 } && clip.FrameCount <= maximumFrames &&
         !string.IsNullOrWhiteSpace(clip.Directory);
 
-    private FrameClip? DecodeOptionalClip(ClipDefinition clip, int decodeWidth, CancellationToken cancellationToken)
+    private FrameClip? DecodeOptionalClip(ClipDefinition clip, CancellationToken cancellationToken, bool requireAllClips)
     {
         try
         {
-            return DecodeClip(clip, decodeWidth, cancellationToken);
+            return DecodeClip(clip, cancellationToken);
         }
-        catch (Exception error) when (IsAssetError(error))
+        catch (Exception error) when (!requireAllClips && IsAssetError(error))
         {
             return null;
         }
     }
 
-    private int GetDecodeWidth(int frameCount)
-    {
-        double decodedBytes = 4d * _canvas.Width * _canvas.Height * frameCount;
-        double scale = Math.Min(1, Math.Sqrt(OutfitDecodedBytesBudget / decodedBytes));
-        return Math.Max(1, (int)Math.Floor(_canvas.Width * scale));
-    }
-
-    private FrameClip DecodeClip(ClipDefinition clip, int decodeWidth, CancellationToken cancellationToken)
+    private FrameClip DecodeClip(ClipDefinition clip, CancellationToken cancellationToken)
     {
         var frames = new BitmapSource[clip.FrameCount];
         for (int index = 0; index < frames.Length; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            frames[index] = DecodeFrame(clip, index, decodeWidth);
+            frames[index] = DecodeFrame(clip, index);
         }
 
         return new FrameClip(clip.Fps, frames);
     }
 
-    private BitmapSource DecodeFrame(ClipDefinition clip, int index, int decodeWidth)
+    private BitmapSource DecodeFrame(ClipDefinition clip, int index)
     {
         using var stream = File.OpenRead(ResolveFrame(clip, index));
-        BitmapCacheOption cache = decodeWidth == _canvas.Width ? BitmapCacheOption.OnLoad : BitmapCacheOption.None;
-        var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, cache);
+        var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         BitmapFrame frame = decoder.Frames[0];
         if (frame.PixelWidth != _canvas.Width || frame.PixelHeight != _canvas.Height)
         {
             throw new InvalidDataException("The animation frame size differs from the character canvas.");
         }
 
-        if (decodeWidth == _canvas.Width)
-        {
-            frame.Freeze();
-            return frame;
-        }
-
-        stream.Position = 0;
-        return DecodeBitmap(stream, decodeWidth);
+        frame.Freeze();
+        return frame;
     }
 
     internal static BitmapSource DecodeThumbnail(string file, int maximumWidth, int maximumHeight)
@@ -435,7 +438,7 @@ internal sealed record ClipDefinition(string Directory, int Fps, int FrameCount)
 internal sealed record FrameClip(int Fps, BitmapSource[] Frames);
 
 internal sealed record LoadedOutfit(OutfitDefinition Definition, IReadOnlyList<FrameClip> IdleClips, FrameClip? Touch,
-    System.Windows.Point Anchor, BitmapSource? Preview, FrameClip? Move = null, FrameClip? Sleep = null, BitmapSource? Icon = null,
+    System.Windows.Point Anchor, Rect RestingBounds, BitmapSource? Preview, FrameClip? Move = null, FrameClip? Sleep = null, BitmapSource? Icon = null,
     FrameClip? Sit = null)
 {
     internal FrameClip Idle => IdleClips[0];

@@ -103,7 +103,7 @@ public partial class App : Application
             {
                 if (pack.IsOutfitReady(outfit))
                 {
-                    await session.SelectAsync(pack, outfit);
+                    await session.SelectAsync(pack, outfit, _settings.HardwareAccelerationEnabled);
                 }
                 else if (!build.IsCancellationRequested)
                 {
@@ -114,7 +114,7 @@ public partial class App : Application
                         progress.Closed += (_, _) => build.Cancel();
                         progress.Show();
                     }
-                    await session.SelectAsync(pack, outfit, build.Token);
+                    await session.SelectAsync(pack, outfit, _settings.HardwareAccelerationEnabled, build.Token);
                 }
 
                 if (_exiting || session.Outfit is not null)
@@ -148,8 +148,9 @@ public partial class App : Application
             }
 
             var progress = new Progress<string>(window.ShowProgress);
+            bool hardwareAcceleration = _settings.HardwareAccelerationEnabled;
             await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, null, progress, setupToken,
-                requireJapaneseVoice: true), setupToken);
+                hardwareAcceleration, requireJapaneseVoice: true), setupToken);
             (_artwork, _installedPacks) = await Task.Run(() =>
             {
                 AssetSnapshot? artwork = ManagedCharacterAssets.LoadInstalled(ReleaseUpdater.CurrentVersion);
@@ -350,7 +351,10 @@ public partial class App : Application
             return;
         }
 
-        var wardrobe = new WardrobeWindow(pet.Session, _installedPacks) { Icon = pet.Window.Icon };
+        var wardrobe = new WardrobeWindow(pet.Session, _installedPacks, () => _settings.HardwareAccelerationEnabled)
+        {
+            Icon = pet.Window.Icon
+        };
         pet.Wardrobe = wardrobe;
         wardrobe.Closed += (_, _) => pet.Wardrobe = null;
         wardrobe.ShowNear(pet.Window);

@@ -22,7 +22,8 @@ internal sealed class PetSession : IDisposable
 
     internal bool HasLoadError(CharacterPack pack, OutfitDefinition outfit) => _failedOutfits.Contains((pack, outfit.Id));
 
-    internal async Task SelectAsync(CharacterPack pack, OutfitDefinition outfit, CancellationToken token = default)
+    internal async Task SelectAsync(CharacterPack pack, OutfitDefinition outfit, bool hardwareAcceleration,
+        CancellationToken token = default)
     {
         if (PendingSelection == (pack, outfit))
         {
@@ -51,7 +52,8 @@ internal sealed class PetSession : IDisposable
             await _decodeGate.WaitAsync(request.Token);
             try
             {
-                LoadedOutfit loaded = await Task.Run(() => pack.LoadOutfitAsync(outfit, request.Token), request.Token);
+                LoadedOutfit loaded = await Task.Run(() => pack.LoadOutfitAsync(outfit, hardwareAcceleration, request.Token),
+                    request.Token);
                 if (_request == request && !request.IsCancellationRequested)
                 {
                     Pack = pack;
@@ -66,7 +68,7 @@ internal sealed class PetSession : IDisposable
         catch (OperationCanceledException) when (request.IsCancellationRequested)
         {
         }
-        catch (Exception error) when (CharacterPack.IsAssetError(error))
+        catch (Exception error) when (error is OutOfMemoryException || CharacterPack.IsAssetError(error))
         {
             if (_request == request)
             {

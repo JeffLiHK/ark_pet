@@ -96,7 +96,7 @@ internal static class AssetReleaseUpdater
     }
 
     internal static async Task InstallAsync(AssetReleaseUpdate update, AssetInstallation? running,
-        IProgress<string> progress, CancellationToken token, bool requireJapaneseVoice = false)
+        IProgress<string> progress, CancellationToken token, bool hardwareAcceleration, bool requireJapaneseVoice = false)
     {
         await InstallGate.WaitAsync(token);
         string staging = Path.Combine(ManagedCharacterAssets.RootDirectory, $".stage-{Guid.NewGuid():N}");
@@ -121,7 +121,7 @@ internal static class AssetReleaseUpdater
             ExtractPackage(archive, payload, update.Manifest.SchemaVersion, token);
             if (update.Manifest.IsCatalog)
             {
-                await PrepareCatalogAsync(payload, update.Manifest, progress, token);
+                await PrepareCatalogAsync(payload, update.Manifest, progress, hardwareAcceleration, token);
             }
             else
             {
@@ -129,7 +129,7 @@ internal static class AssetReleaseUpdater
                 {
                     progress.Report("正在本機產生並驗證動畫影格…");
                     string generated = Path.Combine(staging, "generated");
-                    await SpineFrameCache.GenerateAsync(payload, generated, ManagedCharacterAssets.LegacyPackId, token);
+                    await SpineFrameCache.GenerateAsync(payload, generated, ManagedCharacterAssets.LegacyPackId, hardwareAcceleration, token);
                     payload = generated;
                 }
                 if (CharacterPack.TryOpen(payload) is not { Id: ManagedCharacterAssets.LegacyPackId } pack)
@@ -256,7 +256,7 @@ internal static class AssetReleaseUpdater
     }
 
     private static async Task PrepareCatalogAsync(string payload, AssetReleaseManifest manifest, IProgress<string> progress,
-        CancellationToken token)
+        bool hardwareAcceleration, CancellationToken token)
     {
         ArtworkCatalog catalog;
         try
@@ -286,7 +286,7 @@ internal static class AssetReleaseUpdater
             if (character.HasSpineSource)
             {
                 await SpineFrameCache.GenerateAsync(character.SourceDirectory(payload), character.PlaybackDirectory(payload),
-                    character.Id, token);
+                    character.Id, hardwareAcceleration, token);
             }
             character.LoadValidated(payload, token);
         }

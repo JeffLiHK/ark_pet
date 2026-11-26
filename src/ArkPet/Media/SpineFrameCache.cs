@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -29,7 +30,7 @@ internal static class SpineFrameCache
         ["touch"] = "Interact"
     };
 
-    internal static async Task GenerateAsync(string source, string destination, string characterId, CancellationToken token,
+    internal static async Task GenerateAsync(string source, string destination, string characterId, bool hardwareAcceleration, CancellationToken token,
         string? modelId = null)
     {
         SourcePack pack = ReadSourcePack(source, characterId);
@@ -47,7 +48,7 @@ internal static class SpineFrameCache
                     deadline.CancelAfter(TimeSpan.FromMinutes(10));
                     try
                     {
-                        await RenderAsync(pack, source, destination, modelId, deadline.Token);
+                        await RenderWithFallbackAsync(pack, source, destination, modelId, hardwareAcceleration, deadline.Token);
                     }
                     catch (OperationCanceledException error) when (!token.IsCancellationRequested)
                     {
@@ -109,14 +110,52 @@ internal static class SpineFrameCache
     internal static bool IsIdentifier(string? value) =>
         value is not null && Regex.IsMatch(value, @"\A[a-z0-9][a-z0-9-]{0,39}\z");
 
-    private static async Task RenderAsync(SourcePack pack, string source, string destination, string? modelId, CancellationToken token)
+    private static async Task RenderWithFallbackAsync(SourcePack pack, string source, string destination, string? modelId,
+        bool hardwareAcceleration, CancellationToken token)
+    {
+        if (hardwareAcceleration)
+        {
+            string hardwareOutput = $"{destination}.gpu-{Guid.NewGuid():N}";
+            try
+            {
+                await RenderAsync(pack, source, hardwareOutput, modelId, useGpu: true, token);
+                token.ThrowIfCancellationRequested();
+                Directory.Move(hardwareOutput, destination);
+                return;
+            }
+            catch (RendererUnavailableException error) when (!token.IsCancellationRequested)
+            {
+                Trace.TraceWarning("Spine hardware rendering failed. Retrying in software: {0}", error.Message);
+            }
+            finally
+            {
+                ManagedCharacterAssets.TryDeleteDirectory(hardwareOutput);
+            }
+        }
+
+        token.ThrowIfCancellationRequested();
+        try
+        {
+            await RenderAsync(pack, source, destination, modelId, useGpu: false, token);
+        }
+        catch (RendererUnavailableException error)
+        {
+            throw new InvalidDataException(error.Message, error);
+        }
+    }
+
+    private static async Task RenderAsync(SourcePack pack, string source, string destination, string? modelId, bool useGpu,
+        CancellationToken token)
     {
         try
         {
-            var options = new CoreWebView2EnvironmentOptions(
-                "--use-angle=swiftshader --enable-unsafe-swiftshader --disable-background-timer-throttling");
+            // WebView2 environments sharing a profile must use the same browser arguments.
+            string profile = useGpu ? "renderer-gpu" : "renderer";
+            var options = new CoreWebView2EnvironmentOptions(useGpu
+                ? "--disable-background-timer-throttling"
+                : "--use-angle=swiftshader --enable-unsafe-swiftshader --disable-background-timer-throttling");
             CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(
-                browserExecutableFolder: null, Path.Combine(ManagedCharacterAssets.RootDirectory, "renderer"), options)
+                browserExecutableFolder: null, Path.Combine(ManagedCharacterAssets.RootDirectory, profile), options)
                 .WaitAsync(token);
             using var window = new HwndSource(new HwndSourceParameters("ArkPet Spine renderer", 1, 1)
             {
@@ -129,18 +168,57 @@ internal static class SpineFrameCache
             {
                 controller.IsVisible = false;
                 CoreWebView2 webView = controller.CoreWebView2;
-                var navigation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                webView.NavigationCompleted += (_, args) => navigation.TrySetResult(args.IsSuccess);
-                webView.NavigateToString("<!doctype html><meta charset=utf-8>");
-                if (!await navigation.Task.WaitAsync(token))
+                using var render = CancellationTokenSource.CreateLinkedTokenSource(token);
+                void ProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs args)
                 {
-                    throw new InvalidDataException("無法開啟本機 Spine 轉檔頁面。");
+                    if (args.ProcessFailedKind is CoreWebView2ProcessFailedKind.BrowserProcessExited or
+                        CoreWebView2ProcessFailedKind.RenderProcessExited or
+                        CoreWebView2ProcessFailedKind.RenderProcessUnresponsive or
+                        CoreWebView2ProcessFailedKind.GpuProcessExited)
+                    {
+                        render.Cancel();
+                    }
                 }
 
-                await EvaluateAsync(webView, ReadScript("ArtPet.SpineWebGL.js") + "\nvoid 0", token);
-                await EvaluateAsync(webView, ReadScript("ArtPet.SpineFrameRenderer.js") + "\nvoid 0", token);
-                await EvaluateAsync(webView, $"window.startRenderer({Json(new { size = CanvasSize, fps = Fps, Animations })})", token);
-                await ExportPackAsync(webView, pack, source, destination, modelId, token);
+                webView.ProcessFailed += ProcessFailed;
+                try
+                {
+                    var navigation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    webView.NavigationCompleted += (_, args) => navigation.TrySetResult(args.IsSuccess);
+                    webView.NavigateToString("<!doctype html><meta charset=utf-8>");
+                    if (!await navigation.Task.WaitAsync(render.Token))
+                    {
+                        throw new RendererUnavailableException("無法開啟本機 Spine 轉檔頁面。");
+                    }
+
+                    await EvaluateAsync(webView, ReadScript("ArtPet.SpineWebGL.js") + "\nvoid 0", render.Token);
+                    await EvaluateAsync(webView, ReadScript("ArtPet.SpineFrameRenderer.js") + "\nvoid 0", render.Token);
+                    JsonElement ready;
+                    try
+                    {
+                        ready = await EvaluateAsync(webView,
+                            $"window.startRenderer({Json(new { size = CanvasSize, fps = Fps, Animations })})", render.Token);
+                    }
+                    catch (InvalidDataException error)
+                    {
+                        throw new RendererUnavailableException("WebGL 無法初始化 Spine 繪圖環境。", error);
+                    }
+
+                    if (ready.ValueKind != JsonValueKind.True)
+                    {
+                        throw new RendererUnavailableException("WebGL 無法啟動，未能產生動畫影格。");
+                    }
+
+                    await ExportPackAsync(webView, pack, source, destination, modelId, render.Token);
+                }
+                catch (OperationCanceledException error) when (render.IsCancellationRequested && !token.IsCancellationRequested)
+                {
+                    throw new RendererUnavailableException("WebView2 的繪圖程序停止回應。", error);
+                }
+                finally
+                {
+                    webView.ProcessFailed -= ProcessFailed;
+                }
             }
             finally
             {
@@ -151,7 +229,11 @@ internal static class SpineFrameCache
         {
             throw new InvalidDataException("需要 Microsoft Edge WebView2 Runtime 才能產生動畫影格。", error);
         }
-        catch (Exception error) when (error is COMException or InvalidOperationException or JsonException or FormatException)
+        catch (COMException error)
+        {
+            throw new RendererUnavailableException("WebView2 無法繼續產生動畫影格。", error);
+        }
+        catch (Exception error) when (error is InvalidOperationException or JsonException or FormatException)
         {
             throw new InvalidDataException("無法產生 Spine 動畫影格。", error);
         }
@@ -175,6 +257,11 @@ internal static class SpineFrameCache
         }
 
         JsonElement canvas = await EvaluateAsync(webView, "window.renderer.frame()", token);
+        if (canvas.ValueKind == JsonValueKind.Null)
+        {
+            throw new RendererUnavailableException("產生動畫影格時失去 WebGL 繪圖環境。");
+        }
+
         long remaining = 1024L * 1024 * 1024;
         var clipsByModel = new Dictionary<string, Dictionary<string, ClipDefinition>>(StringComparer.Ordinal);
         foreach ((string id, Dictionary<string, int> counts) in models.Where(model => modelId is null || model.Key == modelId))
@@ -193,6 +280,11 @@ internal static class SpineFrameCache
                     int end = Math.Min(start + batchSize, frameCount);
                     JsonElement frames = await EvaluateAsync(webView,
                         $"window.renderer.render({Json(new { id, clip, start, end })})", token);
+                    if (frames.ValueKind == JsonValueKind.Null)
+                    {
+                        throw new RendererUnavailableException("產生動畫影格時失去 WebGL 繪圖環境。");
+                    }
+
                     if (frames.ValueKind != JsonValueKind.Array || frames.GetArrayLength() != end - start)
                     {
                         throw new InvalidDataException("產生的動畫影格數量不符。");
@@ -244,6 +336,11 @@ internal static class SpineFrameCache
         string png = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, texture), token));
         string skeletonData = Convert.ToBase64String(await File.ReadAllBytesAsync(BoundedSourceFile(directory, "model.skel"), token));
         JsonElement result = await EvaluateAsync(webView, $"window.renderer.load({Json(new { id, atlas, texture, png, skeletonData })})", token);
+        if (result.ValueKind == JsonValueKind.Null)
+        {
+            throw new RendererUnavailableException("載入模型時失去 WebGL 繪圖環境。");
+        }
+
         var counts = result.Deserialize<Dictionary<string, int>>(ManagedCharacterAssets.JsonOptions);
         if (counts is null || counts.Count != Animations.Count ||
             Animations.Keys.Any(clip => !counts.TryGetValue(clip, out int count) || count is < 1 or > MaximumFramesPerModel) ||
@@ -334,6 +431,9 @@ internal static class SpineFrameCache
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
     }
+
+    private sealed class RendererUnavailableException(string message, Exception? inner = null)
+        : Exception(message, inner);
 
     internal sealed record SourcePack(int SchemaVersion, string Id, string DisplayName, string DefaultOutfitId, SourceOutfit[] Outfits);
     internal sealed record SourceOutfit(string Id, string DisplayName, string ModelId, bool MoveFacesLeft = false);

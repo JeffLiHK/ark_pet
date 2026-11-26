@@ -59,7 +59,8 @@ try {
     const page = await browser.newPage();
     await page.addScriptTag({ path: runtimeFile });
     await page.addScriptTag({ path: path.join(root, "src/ArkPet/Media/SpineFrameRenderer.js") });
-    await page.evaluate(args => window.startRenderer(args), { size: canvasSize, fps, animations });
+    const rendererReady = await page.evaluate(args => window.startRenderer(args), { size: canvasSize, fps, animations });
+    if (!rendererReady) throw new Error("WebGL is unavailable in the export browser.");
 
     const modelStage = path.join(stage, "models");
     const assetStage = path.join(stage, "assets");
@@ -79,8 +80,9 @@ try {
             atlas,
             texture,
             png: await readFile(texturePath, "base64"),
-            binary: await readFile(model + ".skel", "base64"),
+            skeletonData: await readFile(model + ".skel", "base64"),
         });
+        if (!clips) throw new Error(`WebGL could not load ${outfit.name}.`);
         if (Object.values(clips).reduce((total, frames) => total + frames, 0) > 4096) {
             throw new Error(`${outfit.name} exceeds the frame limit for one outfit.`);
         }
@@ -94,6 +96,7 @@ try {
     }
 
     const canvas = await page.evaluate(() => window.renderer.frame());
+    if (!canvas) throw new Error("WebGL context was lost during export.");
     console.log(`Canvas ${canvas.width} × ${canvas.height}, anchor ${canvas.anchorX}, ${canvas.anchorY}`);
     for (const outfit of outfits) {
         const directory = path.join(assetStage, outfit.name);
@@ -134,6 +137,7 @@ async function exportOutfit(page, directory, outfit, clips) {
             const frames = await page.evaluate(args => window.renderer.render(args), {
                 id: outfit.id, clip, start, end: Math.min(start + batchSize, frameCount),
             });
+            if (!frames) throw new Error(`WebGL could not render ${outfit.name}/${clip}.`);
             await Promise.all(frames.map((png, offset) =>
                 writeFile(path.join(clipDirectory, `${String(start + offset).padStart(4, "0")}.png`), png, "base64")));
         }

@@ -44,6 +44,7 @@ internal partial class SettingsWindow : Window
         InteractionModeCheckBox.IsChecked = settings.InteractionEnabled;
         FreeModeCheckBox.IsChecked = settings.FreeModeEnabled;
         PhysicsModeCheckBox.IsChecked = settings.PhysicsModeEnabled;
+        HardwareAccelerationCheckBox.IsChecked = settings.HardwareAccelerationEnabled;
         WalkingSpeedOptions.ItemsSource = PetSettings.WalkingSpeeds.ToArray();
         WalkingSpeedOptions.SelectedItem = settings.WalkingSpeedPercent;
         VoiceOptions.SelectedValue = settings.VoiceLanguage;
@@ -78,6 +79,7 @@ internal partial class SettingsWindow : Window
         InteractionModeCheckBox.Click += ApplySelections;
         FreeModeCheckBox.Click += ApplySelections;
         PhysicsModeCheckBox.Click += ApplySelections;
+        HardwareAccelerationCheckBox.Click += ApplySelections;
         WalkingSpeedOptions.SelectionChanged += ApplySelections;
         VoiceOptions.SelectionChanged += ApplySelections;
         SubtitleOptions.SelectionChanged += ApplySelections;
@@ -133,6 +135,7 @@ internal partial class SettingsWindow : Window
                 InteractionEnabled = InteractionModeCheckBox.IsChecked == true,
                 FreeModeEnabled = FreeModeCheckBox.IsChecked == true,
                 PhysicsModeEnabled = PhysicsModeCheckBox.IsChecked == true,
+                HardwareAccelerationEnabled = HardwareAccelerationCheckBox.IsChecked == true,
                 WalkingSpeedPercent = walkingSpeed,
                 OutlineLevel = OutlineOptions.SelectedIndex,
                 ShadowLevel = ShadowOptions.SelectedIndex,
@@ -291,7 +294,9 @@ internal partial class SettingsWindow : Window
             }
 
             var progress = new Progress<string>(message => AssetStatus.Text = message);
-            await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _installedArtwork, progress, token), token);
+            bool hardwareAcceleration = _settings.HardwareAccelerationEnabled;
+            await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _installedArtwork, progress, token,
+                hardwareAcceleration), token);
             await LoadInstalledModelsAsync(token);
             RefreshAssetVersion();
             AssetStatus.Text = "全部模型已下載。可在這裡建置，衣櫃將於下次啟動更新。";
@@ -338,7 +343,7 @@ internal partial class SettingsWindow : Window
 
     private void OpenModelManager(object sender, RoutedEventArgs e)
     {
-        var manager = new WardrobeWindow(null, _modelPacks)
+        var manager = new WardrobeWindow(null, _modelPacks, () => _settings.HardwareAccelerationEnabled)
         {
             Owner = this,
             Icon = Icon,

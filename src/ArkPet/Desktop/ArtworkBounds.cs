@@ -7,7 +7,6 @@ namespace ArtPet.Windows.Desktop;
 
 internal static class ArtworkBounds
 {
-    // Use the outfit's resting frame for a stable recovery check across animation poses.
     internal static Rect FromFrame(BitmapSource frame)
     {
         Int32Rect pixels = VisiblePixels(frame);
@@ -16,13 +15,19 @@ internal static class ArtworkBounds
             return Rect.Empty;
         }
 
-        // The image is centered with Stretch="Uniform" inside the square pet window.
+        Rect area = FrameArea(frame);
+        return new Rect(area.X + pixels.X * area.Width / frame.PixelWidth,
+            area.Y + pixels.Y * area.Height / frame.PixelHeight,
+            pixels.Width * area.Width / frame.PixelWidth, pixels.Height * area.Height / frame.PixelHeight);
+    }
+
+    internal static Rect FrameArea(BitmapSource frame)
+    {
+        // Stretch="Uniform" centers the bitmap in the square artwork canvas.
         double size = Math.Max(frame.Width, frame.Height);
         double width = frame.Width / size;
         double height = frame.Height / size;
-        return new Rect((1 - width) / 2 + pixels.X * width / frame.PixelWidth,
-            (1 - height) / 2 + pixels.Y * height / frame.PixelHeight,
-            pixels.Width * width / frame.PixelWidth, pixels.Height * height / frame.PixelHeight);
+        return new Rect((1 - width) / 2, (1 - height) / 2, width, height);
     }
 
     internal static Int32Rect VisiblePixels(BitmapSource frame)

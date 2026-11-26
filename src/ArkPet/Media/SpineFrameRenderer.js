@@ -3,7 +3,7 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
     const canvas = document.createElement("canvas");
     canvas.width = canvas.height = size;
     const gl = canvas.getContext("webgl", { alpha: true, antialias: true, preserveDrawingBuffer: true });
-    if (!gl) throw new Error("WebGL is unavailable in the export browser.");
+    if (!gl) return false;
 
     const scene = new spine.webgl.SceneRenderer(canvas, gl);
     const models = new Map();
@@ -20,14 +20,26 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
 
     window.renderer = {
         async load({ id, atlas, texture, png, skeletonData }) {
+            if (gl.isContextLost()) return null;
             const bytes = Uint8Array.from(atob(png), char => char.charCodeAt(0));
             // Decode without waiting for a visible document or multiplying the texture's alpha again.
             const image = await createImageBitmap(new Blob([bytes], { type: "image/png" }), { premultiplyAlpha: "none" });
+            const maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+            if (gl.isContextLost() || image.width > maxTextureSize || image.height > maxTextureSize) {
+                image.close();
+                return null;
+            }
+
             const textureAtlas = new spine.TextureAtlas(atlas, file => {
                 if (file !== texture) throw new Error(`Unexpected atlas page ${file}`);
                 // Ark-Models PNGs already contain premultiplied alpha.
                 return new spine.webgl.GLTexture(scene.context, image);
             });
+            if (gl.getError() !== gl.NO_ERROR) {
+                image.close();
+                return null;
+            }
+
             const attachmentLoader = new spine.AtlasAttachmentLoader(textureAtlas);
             const skeletonBytes = Uint8Array.from(atob(skeletonData), char => char.charCodeAt(0));
             // Some source packs use the .skel filename for Spine JSON exports.
@@ -65,9 +77,10 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
             bounds.bottom = Math.min(bounds.bottom, modelBounds.bottom);
             bounds.top = Math.max(bounds.top, modelBounds.top);
             models.set(id, { skeleton, clips });
-            return counts;
+            return gl.isContextLost() ? null : counts;
         },
         frame() {
+            if (gl.isContextLost()) return null;
             // Give every animation and outfit the same camera and model origin.
             const padding = 12;
             const unitsPerPixel = Math.max(bounds.right - bounds.left, bounds.top - bounds.bottom) / (size - padding * 2);
@@ -84,6 +97,7 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
             };
         },
         render({ id, clip, start, end }) {
+            if (gl.isContextLost()) return null;
             const { skeleton, clips } = models.get(id);
             const frames = [];
             for (let index = start; index < end; index++) {
@@ -95,7 +109,8 @@ window.startRenderer = function startRenderer({ size, fps, animations }) {
                 scene.end();
                 frames.push(canvas.toDataURL("image/png").split(",", 2)[1]);
             }
-            return frames;
+            return gl.isContextLost() || gl.getError() !== gl.NO_ERROR ? null : frames;
         },
     };
+    return true;
 };

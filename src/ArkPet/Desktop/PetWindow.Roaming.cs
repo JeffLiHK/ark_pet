@@ -12,15 +12,28 @@ namespace ArtPet.Windows.Desktop;
 public partial class PetWindow
 {
     private const double WalkingSpeedDip = 32;
-    private const int SleepChanceDenominator = 12;
+    private const int WalkWeight = 60;
+    private const int IdleWeight = 24;
+    private const int SitWeight = 10;
+    private const int SleepWeight = 6;
     private bool _roaming;
     private (TimeSpan RenderingTime, long Timestamp)? _lastRoamingFrame;
     private Walk? _walk;
     private long _restUntil;
 
+    private bool CanSitHere =>
+        _player.CanSit && (!Settings.PhysicsModeEnabled || _support?.Kind == DesktopSurfaceKind.Window);
+
+    private bool CanSleepHere => _player.CanSleep && (!Settings.PhysicsModeEnabled ||
+        _support?.Kind is DesktopSurfaceKind.Taskbar or DesktopSurfaceKind.ScreenBottom);
+
+    private bool CanChooseRoamingAction =>
+        Settings.FreeModeEnabled && (!Settings.PhysicsModeEnabled || _support is not null) &&
+        (_player.CanWalk || CanSitHere || CanSleepHere);
+
     private void RefreshRoaming()
     {
-        if (IsVisible && (Settings.PhysicsModeEnabled || (Settings.FreeModeEnabled && _player.CanWalk)))
+        if (IsVisible && (Settings.PhysicsModeEnabled || CanChooseRoamingAction))
         {
             if (!_roaming)
             {
@@ -47,14 +60,38 @@ public partial class PetWindow
         }
     }
 
-    private void PauseRoaming(bool allowSleep = false)
+    private void PauseRoaming() => Rest(GetPhysicsAction(), Stopwatch.GetTimestamp(), 1.5, 4);
+
+    private void Rest(RoamingAction action, long now, double minimumSeconds, double maximumSeconds)
     {
         _walk = null;
-        bool sleep = allowSleep && !Settings.PhysicsModeEnabled && _player.CanSleep &&
-            Random.Shared.Next(SleepChanceDenominator) == 0;
-        _player.SetRoamingAction(sleep ? RoamingAction.Sleep : GetPhysicsAction());
-        int seconds = sleep ? Random.Shared.Next(3, 7) : Random.Shared.Next(2, 6);
-        _restUntil = Stopwatch.GetTimestamp() + Stopwatch.Frequency * seconds;
+        _player.SetRoamingAction(action);
+        double seconds = minimumSeconds + Random.Shared.NextDouble() * (maximumSeconds - minimumSeconds);
+        _restUntil = now + (long)(Stopwatch.Frequency * seconds);
+    }
+
+    private void ChooseRoamingAction(long now)
+    {
+        int walk = _player.CanWalk ? WalkWeight : 0;
+        int sit = CanSitHere ? SitWeight : 0;
+        int sleep = CanSleepHere ? SleepWeight : 0;
+        int choice = Random.Shared.Next(walk + IdleWeight + sit + sleep);
+        if (choice < walk)
+        {
+            BeginWalk(Random.Shared.Next(2) == 0 ? -1 : 1);
+        }
+        else if (choice < walk + IdleWeight)
+        {
+            Rest(RoamingAction.Idle, now, 1.5, 6);
+        }
+        else if (choice < walk + IdleWeight + sit)
+        {
+            Rest(RoamingAction.Sit, now, 3, 9);
+        }
+        else
+        {
+            Rest(RoamingAction.Sleep, now, 6, 14);
+        }
     }
 
     private void UpdateRoaming(object? sender, EventArgs e)
@@ -73,19 +110,19 @@ public partial class PetWindow
 
         if (Settings.PhysicsModeEnabled && _press is null && !ContextMenu.IsOpen && !_voice.IsPlaying)
         {
-            bool wasSupported = _support is not null;
+            DesktopSurface? previousSupport = _support;
             UpdatePhysics(elapsed, now);
-            if ((_support is null && _walk is not null) || (!wasSupported && _support is not null))
+            if (previousSupport?.Handle != _support?.Handle || previousSupport?.Kind != _support?.Kind)
             {
                 PauseRoaming();
             }
-            else if (_walk is null)
+            else if (!CanChooseRoamingAction)
             {
                 _player.SetRoamingAction(GetPhysicsAction());
             }
         }
 
-        if (!Settings.FreeModeEnabled || !_player.CanWalk || (Settings.PhysicsModeEnabled && _support is null))
+        if (!CanChooseRoamingAction)
         {
             return;
         }
@@ -93,7 +130,7 @@ public partial class PetWindow
         if (!SystemParameters.ClientAreaAnimation || _press is not null || IsMouseOver ||
             ContextMenu.IsOpen || _player.IsReacting || _voice.IsPlaying)
         {
-            if (_walk is not null || (!Settings.PhysicsModeEnabled && _player.IsSleeping))
+            if (_walk is not null || (!Settings.PhysicsModeEnabled && _player.IsRestingPose))
             {
                 PauseRoaming();
             }
@@ -105,13 +142,13 @@ public partial class PetWindow
         {
             if (now >= _restUntil)
             {
-                BeginWalk(Random.Shared.Next(2) == 0 ? -1 : 1);
+                ChooseRoamingAction(now);
             }
 
             return;
         }
 
-        walk.Distance += elapsed * GetWalkingSpeed(walk.DpiScale);
+        walk.Distance += elapsed * GetWalkingSpeed(walk.DpiScale) * walk.SpeedMultiplier;
         double progress = Math.Min(1, walk.Distance / walk.Length);
         int top = walk.Start.Y + (int)Math.Round(((double)walk.End.Y - walk.Start.Y) * progress);
         if (Settings.PhysicsModeEnabled)
@@ -141,14 +178,7 @@ public partial class PetWindow
 
         if (progress == 1)
         {
-            if (walk.ReturnDirection != 0 && Random.Shared.Next(3) != 0)
-            {
-                BeginWalk(walk.ReturnDirection);
-            }
-            else
-            {
-                PauseRoaming(allowSleep: true);
-            }
+            ChooseRoamingAction(now);
         }
     }
 
@@ -168,8 +198,9 @@ public partial class PetWindow
         int right = Math.Max(work.Left, work.Right - bounds.Width);
         int bottom = Math.Max(work.Top, work.Bottom - bounds.Height);
         double dpiScale = NativeMethods.GetDpiForWindow(_handle) / 96.0;
-        double speed = GetWalkingSpeed(dpiScale);
-        int distance = (int)Math.Round(speed * (3 + Random.Shared.NextDouble() * 3));
+        double speedMultiplier = 0.85 + Random.Shared.NextDouble() * 0.3;
+        double speed = GetWalkingSpeed(dpiScale) * speedMultiplier;
+        int distance = (int)Math.Round(speed * (2 + Random.Shared.NextDouble() * 5));
         int startX = Math.Clamp(bounds.Left, work.Left, right);
         int startY = Settings.PhysicsModeEnabled ? bounds.Top : Math.Clamp(bounds.Top, work.Top, bottom);
         int endX = Math.Clamp(startX + direction * distance, work.Left, right);
@@ -195,12 +226,11 @@ public partial class PetWindow
             FacingTransform.ScaleX = (dx < 0) != _player.MoveFacesLeft ? -1 : 1;
         }
 
-        int returnDirection = dx > 0 && endX == right ? -1 : dx < 0 && endX == work.Left ? 1 : 0;
-        _walk = new Walk(new Point(bounds.Left, bounds.Top), new Point(endX, endY), length, dpiScale, returnDirection);
+        _walk = new Walk(new Point(bounds.Left, bounds.Top), new Point(endX, endY), length, dpiScale, speedMultiplier);
         _player.SetRoamingAction(RoamingAction.Walk);
     }
 
-    private sealed record Walk(Point Start, Point End, double Length, double DpiScale, int ReturnDirection)
+    private sealed record Walk(Point Start, Point End, double Length, double DpiScale, double SpeedMultiplier)
     {
         internal double Distance { get; set; }
         internal Point LastPosition { get; set; } = Start;

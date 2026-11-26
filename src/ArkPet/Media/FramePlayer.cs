@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -33,6 +32,8 @@ internal sealed class FramePlayer
     private bool _physicsMode;
     private int _index;
     private int _idleClipIndex;
+    private int _idleLoopsPerAction = PetSettings.DefaultIdleLoopsPerAction;
+    private long _nextIdleChoiceLoop;
 
     internal FramePlayer(Image image, FrameworkElement breeze)
     {
@@ -43,11 +44,30 @@ internal sealed class FramePlayer
     internal bool HasOutfit => _outfit is not null;
     internal bool CanWalk => _outfit?.Move is not null;
     internal bool CanSleep => _outfit?.Sleep is not null;
-    internal bool IsSleeping => _roamingAction == RoamingAction.Sleep;
+    internal bool CanSit => _outfit?.Sit is not null;
+    internal bool IsRestingPose => _roamingAction is RoamingAction.Sit or RoamingAction.Sleep;
     internal bool IsReacting => _playingTouch || _breezeStarted is not null;
     internal bool MoveFacesLeft => _outfit?.Definition.MoveFacesLeft == true;
     internal int FramesPerSecond { get; set; } = PetSettings.DefaultAnimationFps;
-    internal int IdleLoopsPerAction { get; set; } = PetSettings.DefaultIdleLoopsPerAction;
+    internal int IdleLoopsPerAction
+    {
+        get => _idleLoopsPerAction;
+        set
+        {
+            if (_idleLoopsPerAction == value)
+            {
+                return;
+            }
+
+            _idleLoopsPerAction = value;
+            if (_clip is { } clip && !_playingTouch && !_freeMode && !_physicsMode)
+            {
+                double elapsed = Stopwatch.GetElapsedTime(_started).TotalSeconds;
+                long completedLoops = (long)(elapsed * clip.Fps / clip.Frames.Length);
+                _nextIdleChoiceLoop = completedLoops + PickIdleLoopCount();
+            }
+        }
+    }
 
     internal void SetMovementModes(bool freeMode, bool physicsMode)
     {
@@ -176,18 +196,15 @@ internal sealed class FramePlayer
         _index = 0;
         _playingTouch = playingTouch;
         _started = now;
+        _nextIdleChoiceLoop = PickIdleLoopCount();
     }
 
-    private void BeginNextIdleClip(LoadedOutfit outfit, long now)
+    private int PickIdleLoopCount()
     {
-        var candidates = Enumerable.Range(0, outfit.IdleClips.Count)
-            .Where(index => index != _idleClipIndex)
-            .ToArray();
-        if (candidates.Length > 0)
-        {
-            _idleClipIndex = candidates[Random.Shared.Next(candidates.Length)];
-            BeginClip(outfit.IdleClips[_idleClipIndex], playingTouch: false, now);
-        }
+        int spread = Math.Max(1, IdleLoopsPerAction / 4);
+        int minimum = Math.Max(PetSettings.MinIdleLoopsPerAction, IdleLoopsPerAction - spread);
+        int maximum = Math.Min(PetSettings.MaxIdleLoopsPerAction, IdleLoopsPerAction + spread);
+        return Random.Shared.Next(minimum, maximum + 1);
     }
 
     private void UpdateFrame(object? sender, EventArgs e)
@@ -216,10 +233,19 @@ internal sealed class FramePlayer
         }
 
         if (!_playingTouch && !_physicsMode && !_freeMode && outfit.IdleClips.Count > 1 &&
-            elapsedSourceFrames >= (long)frameCount * IdleLoopsPerAction)
+            elapsedSourceFrames >= frameCount * _nextIdleChoiceLoop)
         {
-            BeginNextIdleClip(outfit, now);
-            return;
+            // The default idle has two entries in the draw. Every clip can repeat.
+            int nextIndex = Math.Max(0, Random.Shared.Next(outfit.IdleClips.Count + 1) - 1);
+            if (nextIndex != _idleClipIndex)
+            {
+                _idleClipIndex = nextIndex;
+                BeginClip(outfit.IdleClips[nextIndex], playingTouch: false, now);
+                return;
+            }
+
+            // Keep the frame clock running if the same animation was selected.
+            _nextIdleChoiceLoop = (long)(elapsedSourceFrames / frameCount) + PickIdleLoopCount();
         }
 
         int playbackRate = Math.Min(FramesPerSecond, clip.Fps);

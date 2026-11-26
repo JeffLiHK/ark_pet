@@ -21,6 +21,7 @@ namespace ArtPet.Windows.Wardrobe;
 internal partial class WardrobeWindow : Window
 {
     private readonly PetSession? _session;
+    private readonly Func<bool> _hardwareAccelerationEnabled;
     private readonly IReadOnlyList<CharacterPack> _installedPacks;
     private readonly ObservableCollection<CharacterChoice> _characters = [];
     private readonly CancellationTokenSource _loading = new();
@@ -30,9 +31,11 @@ internal partial class WardrobeWindow : Window
     private bool _managingModel;
     private bool _charactersLoaded;
 
-    internal WardrobeWindow(PetSession? session, IReadOnlyList<CharacterPack> installedPacks)
+    internal WardrobeWindow(PetSession? session, IReadOnlyList<CharacterPack> installedPacks,
+        Func<bool> hardwareAccelerationEnabled)
     {
         _session = session;
+        _hardwareAccelerationEnabled = hardwareAccelerationEnabled;
         _installedPacks = installedPacks;
         InitializeComponent();
         ProfessionFilter.ItemsSource = WardrobeProfessions.Options;
@@ -299,7 +302,7 @@ internal partial class WardrobeWindow : Window
                 return;
             }
             CancellationToken token = _loading.Token;
-            await _session.SelectAsync(choice.Pack, choice.Outfit);
+            await _session.SelectAsync(choice.Pack, choice.Outfit, _hardwareAccelerationEnabled());
             try
             {
                 BitmapSource? image = await Task.Run(() => LoadChibi(choice.Pack, choice.Outfit), token);
@@ -332,7 +335,8 @@ internal partial class WardrobeWindow : Window
         string? errorMessage = null;
         try
         {
-            await Task.Run(() => library.ManageOutfitAsync(outfit, remove, token), token);
+            bool hardwareAcceleration = _hardwareAccelerationEnabled();
+            await Task.Run(() => library.ManageOutfitAsync(outfit, remove, hardwareAcceleration, token), token);
             await LoadOutfitImagesAsync(_outfits.Where(choice => library.ShareModel(outfit, choice.Outfit)), token);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)

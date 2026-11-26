@@ -9,6 +9,7 @@ namespace ArtPet.Windows.Desktop;
 internal static class NativeMethods
 {
     internal const int MouseActivate = 0x0021;
+    internal const int WindowPositionChanged = 0x0047;
     internal const int NoActivate = 3;
     internal const int SettingChange = 0x001A;
     internal const int SetWorkArea = 0x002F;
@@ -25,12 +26,14 @@ internal static class NativeMethods
     private const uint NoZOrder = 0x0004;
     private const uint NoActivateOnPosition = 0x0010;
     private const uint FrameChanged = 0x0020;
+    private const uint NoOwnerZOrder = 0x0200;
     private const uint DeferErase = 0x2000;
     private const uint MonitorDefaultToNearest = 0x0002;
     private const int ExtendedStyle = -20;
     private const int TransparentStyle = 0x00000020;
     private const int NoActivateStyle = 0x08000000;
     private const int ToolWindowStyle = 0x00000080;
+    private const int TopmostStyle = 0x00000008;
     private const int ExtendedFrameBounds = 9;
     private const int Cloaked = 14;
 
@@ -43,7 +46,18 @@ internal static class NativeMethods
 
     internal static void BringForward(IntPtr handle)
     {
-        SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, NoSize | NoMove | NoActivateOnPosition);
+        SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0, NoSize | NoMove | NoActivateOnPosition | NoOwnerZOrder);
+    }
+
+    internal static bool IsTopmost(IntPtr handle) => (GetWindowLongW(handle, ExtendedStyle) & TopmostStyle) != 0;
+
+    internal static void EnsureTopmost(IntPtr handle, bool topmost)
+    {
+        if (IsTopmost(handle) != topmost)
+        {
+            SetWindowPos(handle, new IntPtr(topmost ? -1 : -2), 0, 0, 0, 0,
+                NoSize | NoMove | NoActivateOnPosition | NoOwnerZOrder);
+        }
     }
 
     internal static void SetPassiveInput(IntPtr handle, bool passThrough)
@@ -62,7 +76,7 @@ internal static class NativeMethods
     internal static void SetPassivePopup(IntPtr handle, bool topmost)
     {
         SetPassiveInput(handle, passThrough: true);
-        SetWindowPos(handle, new IntPtr(topmost ? -1 : -2), 0, 0, 0, 0, NoSize | NoMove | NoActivateOnPosition);
+        EnsureTopmost(handle, topmost);
     }
 
     internal static Rectangle? GetWorkingArea(Point monitorOrigin)
