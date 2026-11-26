@@ -4,7 +4,7 @@
 
 ## 測試準備
 
-- 測試與驗收期間禁止啟動 ArkPet 正式應用程序。勿執行 `ArtPet.exe` 或開發版的 `ArtPet.Windows.exe`，也勿透過 `dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj` 或 IDE 啟動應用程式。可執行建置、靜態檢查、自動化測試，或在獨立測試宿主載入所需元件。若現有工具無法驗證某項正式程序行為，將該項記為「未驗收」。
+- 測試與驗收期間禁止啟動 ArkPet 正式應用程序。勿執行 `ArtPet.exe` 或開發版的 `ArtPet.Windows.exe`，也勿透過 `dotnet run --project src/ArkPet/ArkPet.csproj` 或 IDE 啟動應用程式。可執行建置、靜態檢查、自動化測試，或在獨立測試宿主載入所需元件。若現有工具無法驗證某項正式程序行為，將該項記為「未驗收」。
 - 開發測試用同一素材格式的兩套自製幾何圖形影格，準備可用、缺檔和損毀的版本。測試期間用獨立暫存目錄建立素材和設定檔。
 - 在 `ArtPet.Core.Tests` 用 MSTest 測 C# 邏輯。動畫時間由測試輸入，指定播放前後的時間點，讓案例每次可用同一條件重跑。PNG 解碼與 Windows 視窗行為由獨立測試宿主驗證，素材與設定使用隔離的測試目錄。
 - 測試專案建立後，從專案根目錄執行。日常修改先跑相關案例，出測試包前跑完整測試專案。

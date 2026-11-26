@@ -4,7 +4,7 @@ ArkPet 是 Windows 桌面寵物。桌面功能可離線使用，下載和檢查�
 
 ## Project Structure
 
-`ArtPet.slnx` contains the C#/.NET 10 WPF desktop app in `src/ArtPet.Windows/`. `Desktop/` owns the pet and settings windows, tray icon, and Win32 interop. `Media/` handles character packs, animation, and voice. `Wardrobe/` contains the outfit picker and previews. `docs/` covers architecture and acceptance, and `scripts/` contains asset migration, validation, and voice import tools.
+`ArtPet.slnx` contains the C#/.NET 10 WPF desktop app in `src/ArkPet/`. `Desktop/` owns the pet and settings windows, tray icon, and Win32 interop. `Media/` handles character packs, animation, and voice. `Wardrobe/` contains the outfit picker and previews. `docs/` covers architecture and acceptance, and `scripts/` contains asset migration, validation, and voice import tools.
 
 Keep character frames, Spine models, and local settings under `local-data/`. That directory and release output under `artifacts/` are Git-ignored.
 
@@ -13,7 +13,7 @@ Keep character frames, Spine models, and local settings under `local-data/`. Tha
 Run commands from the repository root on Windows with the .NET 10.0.4xx SDK specified in `global.json`.
 
 - `dotnet build ArtPet.slnx -c Release` checks that the solution compiles.
-- `dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Debug` builds and launches the current source for routine testing.
+- `dotnet run --project src/ArkPet/ArkPet.csproj -c Debug` builds and launches the current source for routine testing.
 - `dotnet run --file scripts/ValidateHoolheyakPack.cs -- '<pack-directory>'` checks the character pack manifest and frames. Pass the directory that contains `character.json`.
 
 ## 啟動與操作
@@ -49,7 +49,7 @@ dotnet run --file scripts/ValidateHoolheyakPack.cs -- 'local-data/assets/霍爾�
 先匯入角色素材，再從專案根目錄建置含素材的 Windows x64 自包含測試包。
 
 ```powershell
-dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -p:BundleHoolheyak=true -o artifacts/ArtPet-win-x64
+dotnet publish src/ArkPet/ArkPet.csproj -c Release -r win-x64 --self-contained true -p:BundleHoolheyak=true -o artifacts/ArtPet-win-x64
 ```
 
 測試包的執行檔位於 `artifacts/ArtPet-win-x64/ArtPet.exe`。程式依賴和 .NET 執行環境位於 `data`，霍爾海雅的造型素材位於 `resource/assets`，授權文件位於 `resource/licenses`。如果把測試包移出專案，設定會寫到執行檔旁的 `local-data/settings.json`。
@@ -60,7 +60,7 @@ Program and artwork releases have independent tags and update checks. Release on
 
 ### Program release
 
-1. Set `Version` in `src/ArtPet.Windows/ArtPet.Windows.csproj` to the three-part version that matches the requested tag. For example, `v1.3` maps to `1.3.0`. Review against the previous release, stage the intended files by path, commit, and push the commit and tag to `origin`. Confirm that the remote tag points to the intended commit.
+1. Set `Version` in `src/ArkPet/ArkPet.csproj` to the three-part version that matches the requested tag. For example, `v1.3` maps to `1.3.0`. Review against the previous release, stage the intended files by path, commit, and push the commit and tag to `origin`. Confirm that the remote tag points to the intended commit.
 2. Build the tagged source on Windows with the SDK selected by `global.json`. Use the [program packaging commands](#program-packaging) to build and ZIP the release under `artifacts/`. Check the assembly version of `data/ArtPet.Windows.dll`. Check that `ArtPet-win-x64.zip` contains `ArtPet.exe`, `data/`, and `resource/` at its root, with no bundled character assets or `local-data/` entries. Record its SHA-256.
 3. Create a public, stable Release in `JeffLiHK/ark_pet` from the existing tag. Attach the ZIP and mark the Release as latest. With an authenticated GitHub CLI, use `gh release create <tag> <zip> --repo JeffLiHK/ark_pet --verify-tag --latest --title <title> --notes-file <file>`.
 4. Query the public [program latest release endpoint](https://api.github.com/repos/JeffLiHK/ark_pet/releases/latest). Verify the tag, download and GitHub asset digest against the local ZIP. Check that the previous version detects the release. For the first release with `ArtPet.exe`, include the [manual upgrade steps](#manual-upgrade-from-artpetwindowsexe) in the release notes and verify that they preserve installed character assets and settings. For the first release that uses `JeffLiHK/ark_pet`, include the manual upgrade steps from README.md in its release notes. v1.7.0 validates the download URL against the original repository path. For later releases, verify preservation through the in-app update.
@@ -74,7 +74,7 @@ Set `$programVersion` to the same three-part version as the project file. The ta
 ```powershell
 $programVersion = '1.7.0'
 $programOutput = "artifacts/program-v$programVersion"
-dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true -o "$programOutput/publish"
+dotnet publish src/ArkPet/ArkPet.csproj -c Release -r win-x64 --self-contained true -o "$programOutput/publish"
 if ($LASTEXITCODE -ne 0) { throw '程式本體打包失敗。' }
 Compress-Archive -Path "$programOutput/publish/*" -DestinationPath "$programOutput/ArtPet-win-x64.zip"
 ```

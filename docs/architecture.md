@@ -20,7 +20,7 @@ src/
     Animation/          影格時間與動作切換
     Placement/          螢幕位置的座標計算
     Settings/           設定資料與檔案存取
-  ArtPet.Windows/       net10.0-windows
+  ArkPet/       net10.0-windows
     App.xaml.cs         啟動、物件組裝、結束
     PetSession.cs       角色、時裝與顯示狀態
     Desktop/            小人視窗、滑鼠、DPI 和通知區圖示
@@ -40,9 +40,9 @@ flowchart LR
 ```
 
 - **`ArtPet.Core`** 以 C# 紀錄型別表示 `CharacterPack`、`OutfitDefinition`、`AnimationClip` 和 `PetSettings`。角色清單讀取、動畫時間計算及螢幕位置換算可在一般測試程序驗證。核心相依於 .NET 標準函式庫。
-- **`ArtPet.Windows`** 將透明視窗和滑鼠輸入放在 `Desktop`、換裝畫面放在 `Wardrobe`、PNG 解碼和畫面更新放在 `Media`。Win32 呼叫集中在 `Desktop`，XAML 的事件處理只轉交操作或更新畫面。
+- **`ArkPet`** 將透明視窗和滑鼠輸入放在 `Desktop`、換裝畫面放在 `Wardrobe`、PNG 解碼和畫面更新放在 `Media`。Win32 呼叫集中在 `Desktop`，XAML 的事件處理只轉交操作或更新畫面。
 - **`PetSession`** 是桌面層唯一變更當前角色、已套用時裝和可見狀態的地方。視窗與通知區呼叫同一個工作階段，衣櫃依它顯示時裝與載入進度。`App.xaml.cs` 建立相依物件並管理啟動與退出。方法使用具體動詞和參數，註解用來解釋 DPI、焦點或執行緒等容易誤解的行為。
-- 實作時以 `ArtPet.slnx` 管理方案，用 `global.json` 記錄 .NET 10 SDK 版本並允許同版本帶的修補更新，開啟 Nullable。UI 依賴方向固定為 `ArtPet.Windows → ArtPet.Core`。
+- 實作時以 `ArtPet.slnx` 管理方案，用 `global.json` 記錄 .NET 10 SDK 版本並允許同版本帶的修補更新，開啟 Nullable。UI 依賴方向固定為 `ArkPet → ArtPet.Core`。
 
 ## 桌面互動與動畫
 
@@ -138,7 +138,7 @@ flowchart LR
 ```powershell
 dotnet build ArtPet.slnx -c Release
 dotnet test tests/ArtPet.Core.Tests/ArtPet.Core.Tests.csproj -c Release --no-build
-dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Release --no-build
+dotnet run --project src/ArkPet/ArkPet.csproj -c Release --no-build
 ```
 
 桌面框架可用同一格式的自製幾何圖形測試素材，兩套配色即可驗證換裝。正式驗收使用可使用的霍爾海雅預設造型和「歷世流風」，每套至少需有透明 PNG 的待機序列和同一個腳底錨點。實際素材資料夾確認可由程式載入後，再進行畫面和效能驗收。
@@ -150,7 +150,7 @@ dotnet run --project src/ArtPet.Windows/ArtPet.Windows.csproj -c Release --no-bu
 1. **先完成桌面框架。** 用幾何圖形影格驗證穿透點擊、焦點、快點和拖曳、跨螢幕 DPI、置頂、隱藏與叫回。幾何圖形只用於開發測試，第一位實際角色是霍爾海雅。
 2. **接入角色資料和播放。** 先驗收霍爾海雅預設造型，再載入「歷世流風」。確認同一套程式可依兩組資料切換，並在深色和淺色桌布上檢查透明邊緣。測試可選素材損毀、待機影格缺檔、連續換裝和換裝同時跨 DPI。
 3. **測試設定與回復。** MSTest 覆蓋待機循環、互動結束、清單／設定驗證和螢幕座標換算。實機驗證副螢幕拔除、不同 DPI、第二次啟動、重開回復設定，以及連續換裝後舊影格被釋放。第二次啟動時由新程序結束，原有通知區及小人照常運作。
-4. **產出測試包並驗收效能。** 以 `dotnet publish src/ArtPet.Windows/ArtPet.Windows.csproj -c Release -r win-x64 --self-contained true` 產出 Windows x64 資料夾測試包，用該版本測完效能門檻，隨 SDK 修補更新重新產出。[.NET 發佈方式](https://learn.microsoft.com/en-us/dotnet/core/deploying/)
+4. **產出測試包並驗收效能。** 以 `dotnet publish src/ArkPet/ArkPet.csproj -c Release -r win-x64 --self-contained true` 產出 Windows x64 資料夾測試包，用該版本測完效能門檻，隨 SDK 修補更新重新產出。[.NET 發佈方式](https://learn.microsoft.com/en-us/dotnet/core/deploying/)
 
 **已確認。** 在本機 Windows 11 x64 以 .NET 10 WPF 建立重疊視窗，使用自製透明 PNG 測試。Win32 的 `WindowFromPoint` 回報零 Alpha 像素命中下方視窗、不透明像素命中上層視窗，顯示前後前景視窗一致，PNG 也可在關閉資料流後使用。這項測試驗證了透明顯示與點擊判定。
 

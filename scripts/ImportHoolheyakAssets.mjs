@@ -58,7 +58,7 @@ if (path.dirname(await realpath(stage)) !== canonicalData) {
 try {
     const page = await browser.newPage();
     await page.addScriptTag({ path: runtimeFile });
-    await page.addScriptTag({ path: path.join(root, "src/ArtPet.Windows/Media/SpineFrameRenderer.js") });
+    await page.addScriptTag({ path: path.join(root, "src/ArkPet/Media/SpineFrameRenderer.js") });
     await page.evaluate(args => window.startRenderer(args), { size: canvasSize, fps, animations });
 
     const modelStage = path.join(stage, "models");

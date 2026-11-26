@@ -10,5 +10,5 @@
 ## C# 與 WPF
 
 - 使用 UTF-8、四個空格縮排。C# 大括號另起一行。型別、方法與公開成員用 `PascalCase`，參數與區域變數用 `camelCase`，私有欄位用 `_camelCase`。
-- 規則與資料邏輯放在 `ArtPet.Core`，WPF 和 Win32 放在 `ArtPet.Windows`。XAML 負責版面與樣式，檔案讀取和影格解碼放到背景執行。
+- 規則與資料邏輯放在 `ArtPet.Core`，WPF 和 Win32 放在 `ArkPet`。XAML 負責版面與樣式，檔案讀取和影格解碼放到背景執行。
 - 用清楚的名稱，優先沿用現有程式。每個方法聚焦一件事，註解交代像 DPI、焦點和執行緒這類容易誤解的原因。

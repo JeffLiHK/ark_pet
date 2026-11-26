@@ -1,5 +1,5 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/ArtPet.Windows/ArtPet.Windows.csproj" />
+    <Project Path="src/ArkPet/ArkPet.csproj" />
   </Folder>
 </Solution>

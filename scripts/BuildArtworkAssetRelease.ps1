@@ -12,7 +12,7 @@ param(
     [string] $CharacterDirectory = (Join-Path $PSScriptRoot '../local-data/release-characters'),
     [string] $ImageDirectory = (Join-Path $PSScriptRoot '../local-data/release-images'),
     [string] $VoiceDirectory = (Join-Path $PSScriptRoot '../local-data/voices'),
-    [string] $AppIcon = (Join-Path $PSScriptRoot '../src/ArtPet.Windows/Media/ArtPet.ico'),
+    [string] $AppIcon = (Join-Path $PSScriptRoot '../src/ArkPet/Media/ArtPet.ico'),
     [string] $OutputDirectory = (Join-Path $PSScriptRoot "../artifacts/assets-v$AssetVersion")
 )
 
