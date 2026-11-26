@@ -11,7 +11,7 @@
     <AssemblyName>ArtPet.Windows</AssemblyName>
     <RootNamespace>ArtPet.Windows</RootNamespace>
     <AssemblyTitle>$(Product)</AssemblyTitle>
-    <Version>1.8.0</Version>
+    <Version>1.9.0</Version>
     <HoolheyakCharacterFolder>霍爾海雅</HoolheyakCharacterFolder>
     <ProjectAssetsDirectory>$(MSBuildProjectDirectory)\..\..\local-data\assets</ProjectAssetsDirectory>
     <HoolheyakPackDirectory Condition="'$(HoolheyakPackDirectory)' == '' And Exists('$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)\character.json')">$(ProjectAssetsDirectory)\$(HoolheyakCharacterFolder)</HoolheyakPackDirectory>
