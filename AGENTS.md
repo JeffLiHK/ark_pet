@@ -128,6 +128,10 @@ Use a temporary branch such as `codex/publish-vX.Y` if local Release upload is u
 
 Use UTF-8, four-space indentation, and C# braces on separate lines. Use `PascalCase` for types, methods, and public members, `camelCase` for parameters and locals, and `_camelCase` for private fields. Keep layout and styles in XAML. Run file reads and frame decoding off the UI thread. Use `rg --files` for file discovery and `rg` for content searches.
 
+## README Updates
+
+Whenever you add or change an ArkPet feature, update [README.md](README.md) in the same change. Describe what users can do, where to find the feature, and any change to how it works. Include features that are awaiting release and mark them as unavailable in the current public download. Keep the README focused on using ArkPet and put implementation and build details in the developer documentation.
+
 ## Testing
 
 The solution currently has no automated test project or coverage gate. [The acceptance guide](docs/testing-and-acceptance.md) describes planned MSTest coverage. After code changes, build and run the relevant Windows checks from source. Check click-through, focus, dragging, tray behavior, or outfit loading as applicable. Verify pet scale and animation frame rate programmatically.
