@@ -1,0 +1,830 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ArkPet 主介面互動原型</title>
+    <link rel="icon" href="../src/ArkPet/Media/ArtPet.ico">
+    <style>
+        :root {
+            color-scheme: dark;
+            --backdrop: #0d1216;
+            --window: #151b20;
+            --surface: #1d252c;
+            --card: #222b33;
+            --line: #3b4b53;
+            --text: #f2f5f7;
+            --muted: #b7c4cc;
+            --accent: #72ddc3;
+            --focus: #c3d7f7;
+            --warning: #ffcb8b;
+            font: 14px/1.55 "Microsoft JhengHei UI", "Segoe UI", sans-serif;
+        }
+        * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
+        body { margin: 0; background: var(--backdrop); color: var(--text); }
+        h1, h2, h3, p, figure { margin: 0; }
+        h1 { font-size: 24px; line-height: 1.3; }
+        h2 { font-size: 20px; line-height: 1.35; }
+        h3 { font-size: 15px; }
+        a { color: var(--accent); }
+        button, select, input { font: inherit; }
+        button, select {
+            min-height: 34px; border: 1px solid var(--line); border-radius: 5px;
+            padding: 5px 10px; color: var(--text); background: var(--card);
+        }
+        button { cursor: pointer; }
+        button:enabled:hover, select:enabled:hover, details summary:hover { background: #293640; border-color: #72898c; }
+        button:disabled, select:disabled { opacity: .5; cursor: default; }
+        :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+        input[type="checkbox"], input[type="range"] { accent-color: var(--accent); }
+        input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex: none; }
+        input[type="range"] { min-width: 80px; width: 100%; }
+        .muted { color: var(--muted); }
+        .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .spread { justify-content: space-between; }
+        .stack { display: grid; gap: 12px; }
+        .small { font-size: 12px; }
+        .primary { background: var(--accent); color: #102921; border-color: var(--accent); font-weight: 700; }
+        .primary:enabled:hover { color: #102921; background: #a2efdd; border-color: #a2efdd; }
+        .ghost { background: transparent; border-color: transparent; }
+        .compact { min-height: 30px; padding: 3px 8px; font-size: 13px; }
+        .preview-bar, .app, .preview-footer { width: min(1040px, calc(100% - 32px)); margin-inline: auto; }
+        .preview-bar { padding-block: 18px 10px; color: var(--muted); font-size: 12px; }
+        .preview-bar label { display: inline-flex; gap: 6px; align-items: center; }
+        .preview-bar select { min-height: 28px; padding-block: 2px; color: var(--muted); background: var(--window); }
+        .app { background: var(--window); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 18px 52px #0005; }
+        .top {
+            display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+            min-height: 64px; padding: 10px 18px; border-bottom: 1px solid var(--line);
+        }
+        .brand { gap: 9px; font: 700 20px/1 "Segoe UI", sans-serif; letter-spacing: .03em; }
+        .brand img { width: 30px; height: 30px; object-fit: contain; }
+        .top-links { justify-content: flex-end; }
+        .modes { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: #11171b; }
+        .modes button { border-color: transparent; background: transparent; color: var(--muted); white-space: nowrap; min-height: 30px; }
+        .modes button[aria-pressed="true"] { border-color: #426c63; background: #233d39; color: var(--accent); }
+        .layout { display: grid; grid-template-columns: 156px minmax(0, 1fr); min-height: 601px; }
+        .rail { border-right: 1px solid var(--line); padding: 18px 10px; display: flex; flex-direction: column; gap: 6px; }
+        .rail button { width: 100%; text-align: left; background: transparent; border-color: transparent; white-space: nowrap; padding: 8px 12px; }
+        .rail button[aria-current="page"] { border-color: #375e55; background: #203431; color: var(--accent); }
+        .content { min-width: 0; padding: 22px; }
+        .dashboard { display: grid; grid-template-columns: minmax(0, 308px) minmax(0, 1fr); gap: 18px; }
+        .list, .detail { min-width: 0; align-content: start; }
+        .page-head { margin-bottom: 15px; }
+        .page-head .muted { margin-top: 4px; }
+        .page-head button { white-space: nowrap; }
+        .pet-card {
+            display: grid; grid-template-columns: 78px minmax(0, 1fr); min-height: 107px;
+            background: var(--surface); border: 1px solid var(--line); border-radius: 7px;
+        }
+        .pet-card.selected { border-color: #5ab39f; background: #202e32; }
+        .pet-art {
+            border: 0; border-right: 1px solid #47605e; border-radius: 6px 0 0 6px; padding: 0; overflow: hidden;
+            background: linear-gradient(155deg, #4d6861, #293d40 70%);
+        }
+        .pet-art:enabled:hover { background: linear-gradient(155deg, #627f76, #2d474a 70%); }
+        .pet-art img { display: block; width: 100%; height: 105px; object-fit: cover; object-position: 50% 24%; }
+        .pet-art img.fallback { padding: 10px; object-fit: contain; object-position: center; }
+        .pet-info { display: grid; gap: 5px; padding: 9px 10px; align-content: center; min-width: 0; }
+        .identity { color: var(--text); background: transparent; border: 0; text-align: left; padding: 0; min-height: 24px; font-size: 15px; font-weight: 700; }
+        .identity:enabled:hover { background: transparent; text-decoration: underline; }
+        .dot { display: inline-block; margin-right: 5px; width: 6px; height: 6px; border-radius: 50%; background: currentColor; vertical-align: 2px; }
+        .visible { color: var(--accent); }
+        .warning { color: var(--warning); }
+        .more { position: relative; }
+        .more summary {
+            list-style: none; cursor: pointer; min-width: 30px; min-height: 30px; padding: 3px 8px; text-align: center;
+            border: 1px solid var(--line); border-radius: 5px; background: var(--card);
+        }
+        .more summary::-webkit-details-marker { display: none; }
+        .menu {
+            z-index: 2; position: absolute; right: 0; top: calc(100% + 4px); min-width: 155px;
+            display: grid; gap: 2px; background: #182228; border: 1px solid #647b7e; border-radius: 5px; padding: 4px;
+            box-shadow: 0 8px 18px #0007;
+        }
+        .menu button { text-align: left; white-space: nowrap; }
+        .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 7px; padding: 14px; min-width: 0; }
+        .stage {
+            position: relative; min-height: 234px; overflow: hidden; isolation: isolate; display: grid; place-items: center;
+            border: 1px solid #4d6a66; border-radius: 7px; background:
+                radial-gradient(ellipse at 50% 48%, #335650 0, transparent 64%),
+                linear-gradient(145deg, #243c3d, #17272b 77%);
+        }
+        .stage::before {
+            content: ""; position: absolute; z-index: -1; inset: 8px; opacity: .35;
+            background: linear-gradient(#79bbab3d 1px, transparent 1px), linear-gradient(90deg, #79bbab3d 1px, transparent 1px);
+            background-size: 24px 24px;
+            mask-image: radial-gradient(ellipse at center, #000 10%, transparent 78%);
+        }
+        .stage::after { content: ""; position: absolute; z-index: -1; bottom: 20%; width: 56%; height: 19%; border: 1px solid #8dc9b467; border-radius: 50%; background: #142c2d80; }
+        .stage img { display: block; width: 300px; height: 228px; max-width: 98%; object-fit: contain; object-position: center 53%; }
+        .stage img.fallback { width: 116px; height: 116px; }
+        .stage-label { position: absolute; left: 12px; bottom: 10px; padding: 2px 7px; border-radius: 4px; background: #101c20dd; color: var(--muted); }
+        .flipped { transform: scaleX(-1); }
+        .form-label { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+        .toggle { display: flex; gap: 9px; align-items: center; }
+        .section-title { margin-bottom: 8px; }
+        .info { padding: 8px 10px; border-left: 2px solid #578d80; background: #22342f; color: #d4e7e1; }
+        .empty { padding: 26px; max-width: 600px; }
+        .empty .row { margin-top: 5px; }
+        .voice-list { display: grid; gap: 6px; }
+        .voice-line { border-top: 1px solid var(--line); padding-block: 8px 2px; }
+        .checkerboard {
+            position: relative; min-height: 240px; overflow: hidden; border: 1px solid var(--line); border-radius: 5px;
+            background: conic-gradient(#314048 25%, #202b32 0 50%, #314048 0 75%, #202b32 0) 0 0 / 26px 26px;
+        }
+        .photo-pet { position: absolute; width: min(144px, 38%); height: 140px; translate: -50% -50%; object-fit: contain; }
+        .photo-pet.fallback { width: 76px; height: 76px; }
+        .back { display: none; justify-self: start; }
+        .status { min-height: 40px; display: flex; align-items: center; border-top: 1px solid var(--line); padding: 8px 18px; color: var(--muted); font-size: 13px; }
+        .preview-footer { padding: 12px 0 22px; color: var(--muted); }
+        dialog { width: min(440px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; color: var(--text); background: var(--window); border: 1px solid #688182; border-radius: 8px; padding: 20px; }
+        dialog::backdrop { background: #0a131ac9; }
+        @media (max-width: 931px) {
+            .layout { display: block; min-height: 440px; }
+            .rail { padding: 7px 10px; border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; flex-wrap: wrap; gap: 3px; }
+            .rail button { width: auto; padding: 5px 8px; }
+            .dashboard { grid-template-columns: minmax(0, 1fr); max-width: 680px; margin-inline: auto; }
+            .dashboard[data-detail="false"] .detail, .dashboard[data-detail="true"] .list { display: none; }
+            .back { display: inline-flex; }
+        }
+        @media (max-width: 660px) {
+            .preview-bar, .app, .preview-footer { width: calc(100% - 16px); }
+            .top { grid-template-columns: 1fr 1fr; gap: 8px; padding-inline: 10px; }
+            .top-links { grid-column: 2; grid-row: 1; }
+            .modes { grid-column: 1 / -1; justify-self: start; }
+            .content { padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="preview-bar row spread">
+        <span>ArkPet 互動原型</span>
+        <div class="row">
+            <label>功能階段
+                <select id="phase">
+                    <option value="first">第一階段</option>
+                    <option value="all">完整規劃</option>
+                </select>
+            </label>
+            <label>示範狀態
+                <select id="scenario">
+                    <option value="ready">素材就緒</option>
+                    <option value="empty">尚未安裝素材</option>
+                    <option value="voice">缺少配音</option>
+                    <option value="monitor">副螢幕中斷</option>
+                </select>
+            </label>
+        </div>
+    </div>
+    <div class="app">
+        <header class="top">
+            <div class="brand row">
+                <img src="../src/ArkPet/Media/ArtPet.ico" alt="">
+                <span>ArkPet</span>
+            </div>
+            <div class="modes" role="group" aria-label="桌面情境">
+                <button type="button" data-action="mode" data-value="daily" aria-pressed="true">日常</button>
+                <button type="button" data-action="mode" data-value="focus" aria-pressed="false">專注</button>
+                <button type="button" data-action="mode" data-value="hide" aria-pressed="false">暫時隱藏</button>
+            </div>
+            <div class="top-links row">
+                <button type="button" class="ghost" data-action="settings">設定</button>
+                <button type="button" class="ghost" data-action="resources">資源管理</button>
+            </div>
+        </header>
+        <div class="layout">
+            <nav class="rail" aria-label="主導覽">
+                <button type="button" data-action="page" data-value="pets" aria-current="page">我的小人</button>
+                <button type="button" data-action="page" data-value="voices">語音收藏</button>
+                <button type="button" data-action="page" data-value="layout" data-later hidden>桌面配置</button>
+                <button type="button" data-action="page" data-value="photo" data-later hidden>桌面合照</button>
+            </nav>
+            <main id="content" class="content" aria-label="我的小人"></main>
+        </div>
+        <div id="status" class="status" role="status">日常情境</div>
+    </div>
+    <p class="preview-footer small">原型使用示範資料。<a href="main-interface.md">開啟設計規格原始檔</a></p>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+        <div id="dialog-content" class="stack"></div>
+    </dialog>
+    <noscript>開啟 JavaScript 後即可操作互動原型。</noscript>
+    <script>
+        const icon = "../src/ArkPet/Media/ArtPet.ico";
+        const artRoot = "../local-data/assets/霍爾海雅";
+        const outfits = ["預設造型", "歷世流風"];
+        const poses = [["idle", "待機"], ["sit", "坐下"], ["sleep", "睡覺"]];
+        const lines = ["風停了。要在這裡休息一會嗎？", "看來今天的風向不錯。", "你想知道接下來會發生甚麼嗎？"];
+        const pages = { pets: "我的小人", voices: "語音收藏", layout: "桌面配置", photo: "桌面合照" };
+        const modeHints = {
+            daily: "日常情境",
+            focus: "專注情境 · 已暫停自由走動與桌面語音",
+            hide: "暫時隱藏 · 個別顯示偏好會保留"
+        };
+        const main = document.querySelector("#content");
+        const status = document.querySelector("#status");
+        const dialog = document.querySelector("#dialog");
+        const dialogBody = document.querySelector("#dialog-content");
+        const scenarioControl = document.querySelector("#scenario");
+        const narrow = matchMedia("(max-width: 931px)");
+
+        function makePet(id, outfit, visible = true) {
+            return {
+                id, outfit, visible, topmost: true, flipped: false, pose: "idle",
+                range: "current", monitor: "primary", corner: "bottom-right",
+                outside: false, greets: false
+            };
+        }
+
+        const state = {
+            page: "pets", all: false, scenario: "ready", mode: "daily",
+            pets: [makePet(1, outfits[0]), makePet(2, outfits[1], false)],
+            selected: 1, narrowDetail: false, recent: [], favorites: new Set(),
+            prioritize: false, spoken: null, saveLayout: false, rotation: false,
+            candidates: new Set(), day: 0, rotationChoice: null, photo: new Map()
+        };
+
+        function getSelected() {
+            return state.pets.find(pet => pet.id === state.selected);
+        }
+
+        function hasVoice() {
+            return state.scenario !== "voice" && state.scenario !== "empty";
+        }
+
+        function shown(pet) {
+            return pet.visible && state.mode !== "hide";
+        }
+
+        function say(message) {
+            status.textContent = message;
+        }
+
+        function selected(value, current) {
+            return value === current ? " selected" : "";
+        }
+
+        function checked(value) {
+            return value ? " checked" : "";
+        }
+
+        function disabled(value) {
+            return value ? " disabled" : "";
+        }
+
+        function poseOptions(current) {
+            return poses.map(([value, label]) => `<option value="${value}"${selected(value, current)}>${label}</option>`).join("");
+        }
+
+        function art(outfit, file, classes = "", attributes = "") {
+            return `<img class="${classes}" src="${artRoot}/${outfit}/${file}" data-art alt="" ${attributes}>`;
+        }
+
+        function card(pet) {
+            const active = pet.id === state.selected;
+            const visibility = shown(pet) ? "顯示中" : pet.visible ? "情境已隱藏" : "已隱藏";
+            return `
+                <article class="pet-card ${active ? "selected" : ""}" aria-label="小人 ${pet.id}">
+                    <button class="pet-art" data-action="select-pet" data-id="${pet.id}" aria-label="查看小人 ${pet.id} 的詳情">
+                        ${art(pet.outfit, "portrait.png")}
+                    </button>
+                    <div class="pet-info">
+                        <div class="row spread">
+                            <button class="identity" data-action="select-pet" data-id="${pet.id}" data-key="pet-${pet.id}" aria-pressed="${active}">霍爾海雅</button>
+                            <span class="muted small">小人 ${pet.id}</span>
+                        </div>
+                        <div class="row spread small">
+                            <span class="muted">${pet.outfit}</span>
+                            <span class="${shown(pet) ? "visible" : "muted"}"><span class="dot" aria-hidden="true"></span>${visibility}</span>
+                        </div>
+                        <div class="row">
+                            <button class="compact" data-action="visibility" data-id="${pet.id}" data-key="show-${pet.id}">${pet.visible ? "隱藏" : "顯示"}</button>
+                            <button class="compact" data-action="wardrobe" data-id="${pet.id}" data-key="wardrobe-${pet.id}">換裝</button>
+                            <details class="more">
+                                <summary aria-label="小人 ${pet.id} 的更多操作" data-key="more-${pet.id}">···</summary>
+                                <div class="menu" data-id="${pet.id}">
+                                    <button class="ghost compact" data-action="turn">轉身</button>
+                                    <button class="ghost compact" data-action="topmost">${pet.topmost ? "取消置頂" : "置頂"}</button>
+                                    <button class="ghost compact" data-action="reset-position">移回初始位置</button>
+                                    ${pet.id === 1 ? "" : '<button class="ghost compact warning" data-action="remove">移除</button>'}
+                                </div>
+                            </details>
+                        </div>
+                    </div>
+                </article>`;
+        }
+
+        function activity(pet) {
+            const disconnected = pet.range !== "current" && pet.monitor === "secondary" && state.scenario === "monitor";
+            return `<section class="panel stack" aria-labelledby="activity-title">
+                <div class="row spread">
+                    <h3 id="activity-title">桌面活動範圍</h3>
+                    <select aria-label="活動範圍" data-field="range" data-key="range">
+                        <option value="current"${selected("current", pet.range)}>目前螢幕</option>
+                        <option value="monitor"${selected("monitor", pet.range)}>指定螢幕</option>
+                        <option value="corner"${selected("corner", pet.range)}>指定螢幕的一角</option>
+                    </select>
+                </div>
+                ${pet.range === "current" ? "" : `<label class="form-label">螢幕
+                    <select aria-label="螢幕" data-field="monitor" data-key="monitor">
+                        <option value="primary"${selected("primary", pet.monitor)}>主螢幕</option>
+                        <option value="secondary"${selected("secondary", pet.monitor)}>副螢幕</option>
+                    </select></label>`}
+                ${pet.range === "corner" ? `<label class="form-label">區域
+                    <select aria-label="區域" data-field="corner" data-key="corner">
+                        <option value="top-left"${selected("top-left", pet.corner)}>左上角</option>
+                        <option value="top-right"${selected("top-right", pet.corner)}>右上角</option>
+                        <option value="bottom-left"${selected("bottom-left", pet.corner)}>左下角</option>
+                        <option value="bottom-right"${selected("bottom-right", pet.corner)}>右下角</option>
+                    </select></label>` : ""}
+                ${disconnected ? '<p class="warning small">副螢幕已中斷，暫用主螢幕。</p>' : ""}
+                ${pet.outside ? '<p class="warning small">小人位於活動範圍外，自由走動已暫停。</p>' : '<p class="muted small">限制自由模式的走動範圍，仍可手動拖曳。</p>'}
+                ${pet.range === "current" ? "" : `<div class="row">
+                    <button class="compact" data-action="outside" data-key="outside"${disabled(pet.outside)}>模擬拖出範圍</button>
+                    <button class="compact" data-action="return-range" data-key="return-range"${disabled(!pet.outside)}>移回活動範圍</button>
+                </div>`}
+            </section>`;
+        }
+
+        function detail(pet) {
+            const pose = poses.find(([value]) => value === pet.pose)[1];
+            const spoken = state.spoken;
+            return `<section class="detail stack" aria-labelledby="detail-title">
+                <button class="back compact" data-action="back">← 返回我的小人</button>
+                <div class="row spread">
+                    <div>
+                        <h2 id="detail-title" tabindex="-1">霍爾海雅</h2>
+                        <p class="muted">${pet.outfit} · 小人 ${pet.id}</p>
+                    </div>
+                    <label class="form-label small">預覽動作
+                        <select aria-label="預覽動作" data-field="pose" data-key="pose">${poseOptions(pet.pose)}</select>
+                    </label>
+                </div>
+                <figure class="stage">
+                    ${art(pet.outfit, `${pet.pose}/0000.png`, pet.flipped ? "flipped" : "")}
+                    <figcaption class="stage-label small">${pose}預覽</figcaption>
+                </figure>
+                <div class="panel stack">
+                    <div class="row spread">
+                        <h3>語音試聽</h3>
+                        <button class="compact" data-action="listen" data-key="listen"${disabled(!hasVoice())}>${spoken === null ? "播放一句" : "下一句"}</button>
+                    </div>
+                    ${hasVoice() ? "" : '<p class="warning small">目前未安裝配音。<button class="compact" data-action="resources">開啟資源管理</button></p>'}
+                    ${hasVoice() && spoken !== null ? `<div class="row spread">
+                        <p class="muted">${lines[spoken]}</p>
+                        <button class="compact" data-action="favorite" data-id="${spoken}" data-key="favorite-preview" aria-pressed="${state.favorites.has(spoken)}">${state.favorites.has(spoken) ? "取消收藏" : "收藏台詞"}</button>
+                    </div>` : ""}
+                </div>
+                ${activity(pet)}
+                ${state.all ? `<section class="panel stack" aria-labelledby="greet-title">
+                    <h3 id="greet-title">小人之間的互動</h3>
+                    <label class="toggle"><input type="checkbox" data-field="greets" data-key="greets"${checked(pet.greets)}>允許小人互動</label>
+                    <div><button class="compact" data-action="greet" data-key="greet">模擬拖近另一隻小人</button></div>
+                </section>` : ""}
+            </section>`;
+        }
+
+        function petsPage() {
+            if (state.scenario === "empty") {
+                return `<div class="page-head row spread"><h1>我的小人</h1><button class="primary" disabled>＋ 新增小人</button></div>
+                    <section class="panel empty stack">
+                        <h2>尚未安裝角色資源</h2>
+                        <p class="muted">下載角色資源後，就可以選擇造型並在桌面顯示小人。</p>
+                        <div><button class="primary" data-action="resources" data-key="empty-resources">下載角色資源</button></div>
+                    </section>`;
+            }
+            return `<div class="dashboard" data-detail="${state.narrowDetail}">
+                <section class="list stack" aria-labelledby="pets-title">
+                    <div class="row spread">
+                        <div><h1 id="pets-title">我的小人</h1><p class="muted small">${state.pets.filter(shown).length} 隻顯示中 · 共 ${state.pets.length} 隻</p></div>
+                        <button class="primary" data-action="add" data-key="add">＋ 新增小人</button>
+                    </div>
+                    ${state.pets.map(card).join("")}
+                </section>
+                ${detail(getSelected())}
+            </div>`;
+        }
+
+        function voiceRow(id, list) {
+            const favorite = state.favorites.has(id);
+            return `<div class="voice-line row spread">
+                <p>${lines[id]}</p><div class="row">
+                    <button class="compact" data-action="replay" data-id="${id}" data-key="replay-${list}-${id}"${disabled(!hasVoice())}>重播</button>
+                    <button class="compact" data-action="favorite" data-id="${id}" data-key="favorite-${list}-${id}" aria-pressed="${favorite}">${favorite ? "取消收藏" : "收藏"}</button>
+                </div>
+            </div>`;
+        }
+
+        function voicesPage() {
+            return `<header class="page-head"><h1>語音收藏</h1><p class="muted">霍爾海雅 · 日語</p></header>
+                <div class="stack">
+                    ${hasVoice() ? "" : '<p class="info">目前沒有可用配音。<button class="compact" data-action="resources">開啟資源管理</button></p>'}
+                    <section class="panel stack">
+                        <div class="row spread">
+                            <h2>已收藏</h2>
+                            <label class="toggle"><input type="checkbox" data-field="prioritize" data-key="prioritize"${checked(state.prioritize)}>互動時優先播放收藏</label>
+                        </div>
+                        <div class="voice-list">${state.favorites.size ? [...state.favorites].map(id => voiceRow(id, "saved")).join("") : '<p class="muted">還沒有收藏。可以從最近播放或小人詳情加入台詞。</p>'}</div>
+                    </section>
+                    <section class="panel stack">
+                        <div class="row spread">
+                            <h2>最近播放</h2>
+                            <button class="compact" data-action="interaction" data-key="interaction"${disabled(!hasVoice() || state.mode !== "daily")}>模擬短按互動</button>
+                        </div>
+                        <div class="voice-list">${state.recent.length ? state.recent.map(id => voiceRow(id, "recent")).join("") : '<p class="muted">在桌面互動或試聽後，台詞會出現在這裡。</p>'}</div>
+                    </section>
+                </div>`;
+        }
+
+        function layoutPage() {
+            return `<header class="page-head"><h1>桌面配置</h1></header>
+                <div class="stack">
+                    <section class="panel stack">
+                        <h2>重新啟動時恢復</h2>
+                        <label class="toggle"><input type="checkbox" data-field="saveLayout" data-key="save-layout"${checked(state.saveLayout)}>記住桌面配置</label>
+                        <p class="muted">保存小人的數量、造型、位置、活動範圍、置頂和顯示偏好。</p>
+                        ${state.scenario === "monitor" ? '<p class="warning">副螢幕已中斷。受影響的小人會移回主螢幕。</p>' : ""}
+                    </section>
+                    <section class="panel stack">
+                        <h2>今日輪值</h2>
+                        <label class="toggle"><input type="checkbox" data-field="rotation" data-key="rotation"${checked(state.rotation)}>每天首次啟動時替主要小人選一套造型</label>
+                        ${outfits.map((outfit, index) => `<label class="toggle">
+                            <input type="checkbox" data-field="candidate" data-id="${index}" data-key="candidate-${index}"${checked(state.candidates.has(outfit))}${disabled(!state.rotation)}>${outfit}
+                        </label>`).join("")}
+                        ${state.rotation && !state.candidates.size ? '<p class="warning">請選擇至少一個輪值造型。</p>' : ""}
+                    </section>
+                    <div class="row">
+                        <button data-action="restart" data-key="restart">模擬重新啟動</button>
+                        <button data-action="next-day" data-key="next-day">模擬隔天啟動</button>
+                    </div>
+                </div>`;
+        }
+
+        function photoEntry(pet, index) {
+            if (!state.photo.has(pet.id)) {
+                state.photo.set(pet.id, { included: index < 2, x: index === 0 ? 35 : 65, y: 57, pose: "idle", flipped: index === 1 });
+            }
+            return state.photo.get(pet.id);
+        }
+
+        function photoPage() {
+            const entries = state.scenario === "empty" ? [] : state.pets.map((pet, index) => [pet, photoEntry(pet, index)]);
+            const included = entries.filter(([, entry]) => entry.included);
+            return `<header class="page-head row spread"><h1>桌面合照</h1>
+                <button class="primary" data-action="export" data-key="export"${disabled(!included.length)}>匯出透明 PNG</button></header>
+                <div class="stack">
+                    <figure class="checkerboard" aria-label="透明合照畫布">
+                        ${included.map(([pet, entry]) => art(pet.outfit, `${entry.pose}/0000.png`,
+                            `photo-pet ${entry.flipped ? "flipped" : ""}`,
+                            `data-photo="${pet.id}" style="left: ${entry.x}%; top: ${entry.y}%"`)).join("")}
+                    </figure>
+                    ${entries.length ? "" : '<p class="info">安裝角色資源後即可安排合照。</p>'}
+                    ${entries.map(([pet, entry]) => `<section class="panel stack">
+                        <label class="toggle"><input type="checkbox" data-field="photo-include" data-id="${pet.id}" data-key="photo-include-${pet.id}"${checked(entry.included)}>小人 ${pet.id} · ${pet.outfit}</label>
+                        ${entry.included ? `<div class="row">
+                            <label class="form-label">姿勢 <select aria-label="小人 ${pet.id} 的合照姿勢" data-field="photo-pose" data-id="${pet.id}" data-key="photo-pose-${pet.id}">${poseOptions(entry.pose)}</select></label>
+                            <button class="compact" data-action="photo-turn" data-id="${pet.id}" data-key="photo-turn-${pet.id}">轉身</button>
+                        </div>
+                        <label class="form-label">水平位置 <input type="range" min="15" max="85" value="${entry.x}" data-field="photo-x" data-id="${pet.id}"></label>
+                        <label class="form-label">垂直位置 <input type="range" min="25" max="75" value="${entry.y}" data-field="photo-y" data-id="${pet.id}"></label>` : ""}
+                    </section>`).join("")}
+                </div>`;
+        }
+
+        const pageViews = { pets: petsPage, voices: voicesPage, layout: layoutPage, photo: photoPage };
+
+        function render(focusKey = document.activeElement?.dataset.key) {
+            document.querySelectorAll("[data-later]").forEach(button => {
+                button.hidden = !state.all;
+            });
+            document.querySelectorAll('[data-action="page"]').forEach(button => {
+                if (button.dataset.value === state.page) {
+                    button.setAttribute("aria-current", "page");
+                } else {
+                    button.removeAttribute("aria-current");
+                }
+            });
+            document.querySelectorAll('[data-action="mode"]').forEach(button => {
+                button.setAttribute("aria-pressed", String(button.dataset.value === state.mode));
+            });
+            main.setAttribute("aria-label", pages[state.page]);
+            main.innerHTML = pageViews[state.page]();
+            if (focusKey) {
+                main.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)?.focus();
+            }
+        }
+
+        function navigate(page) {
+            state.page = page;
+            state.narrowDetail = false;
+            state.spoken = null;
+            render();
+        }
+
+        function selectPet(id) {
+            state.selected = id;
+            state.narrowDetail = true;
+            state.spoken = null;
+            render(`pet-${id}`);
+            if (narrow.matches) {
+                document.querySelector("#detail-title").focus();
+            }
+        }
+
+        function openDialog(title, content, opener = document.activeElement) {
+            dialogBody.innerHTML = `<div class="row spread">
+                <h2 id="dialog-title">${title}</h2>
+                <button class="compact" data-action="close-dialog" autofocus>關閉</button>
+            </div>${content}`;
+            dialog.showModal();
+            dialog.addEventListener("close", () => {
+                const focusKey = opener.dataset.key;
+                const replacement = focusKey && main.querySelector(`[data-key="${CSS.escape(focusKey)}"]`);
+                (opener.isConnected ? opener : replacement)?.focus();
+            }, { once: true });
+        }
+
+        function rememberLine(id) {
+            state.recent = [id, ...state.recent.filter(previous => previous !== id)];
+            say(`試聽台詞 · ${lines[id]}`);
+        }
+
+        function simulateRestart(nextDay) {
+            const initialOutfit = outfits[0];
+            if (nextDay) {
+                state.day++;
+                state.rotationChoice = null;
+            }
+            if (!state.saveLayout) {
+                state.pets = [makePet(1, initialOutfit)];
+                state.selected = 1;
+            }
+            const eligible = state.scenario !== "empty" && state.rotation && state.candidates.size > 0;
+            if (eligible) {
+                const candidates = [...state.candidates];
+                state.rotationChoice ??= candidates[state.day % candidates.length];
+                state.pets[0].outfit = state.rotationChoice;
+            }
+            state.mode = "daily";
+            state.spoken = null;
+            state.photo.clear();
+            const layoutStatus = state.saveLayout ? "已恢復桌面配置" : "以一隻小人啟動";
+            say(`已模擬重新啟動 · ${layoutStatus}${eligible ? ` · 主要小人使用「${state.rotationChoice}」` : ""}`);
+            render();
+        }
+
+        const actions = {
+            page: ({ value }) => navigate(value),
+            mode: ({ value }) => {
+                state.mode = value;
+                say(modeHints[value]);
+                render();
+            },
+            "select-pet": ({ id }) => selectPet(id),
+            back: () => {
+                state.narrowDetail = false;
+                state.spoken = null;
+                render(`pet-${state.selected}`);
+            },
+            add: () => {
+                let id = 2;
+                while (state.pets.some(pet => pet.id === id)) {
+                    id++;
+                }
+                state.pets.push(makePet(id, getSelected().outfit));
+                state.pets.sort((left, right) => left.id - right.id);
+                say(`已新增小人 ${id}`);
+                selectPet(id);
+            },
+            visibility: ({ pet }) => {
+                pet.visible = !pet.visible;
+                say(`小人 ${pet.id} · ${pet.visible && state.mode === "hide" ? "隨情境恢復顯示" : pet.visible ? "顯示中" : "已隱藏"}`);
+                render();
+            },
+            wardrobe: ({ pet, button }) => {
+                openDialog(`小人 ${pet.id} 的衣櫃`, `<p class="muted">選擇霍爾海雅的造型。</p>
+                    ${outfits.map((outfit, index) => `<button data-action="outfit" data-id="${pet.id}" data-value="${index}" aria-pressed="${outfit === pet.outfit}">${outfit}${outfit === pet.outfit ? " · 使用中" : ""}</button>`).join("")}`, button);
+            },
+            outfit: ({ pet, value }) => {
+                pet.outfit = outfits[Number(value)];
+                pet.pose = "idle";
+                if (pet.id === 1 && state.rotationChoice !== null) {
+                    state.rotationChoice = pet.outfit;
+                }
+                dialog.close();
+                say(`小人 ${pet.id} 已換上「${pet.outfit}」`);
+                render();
+            },
+            turn: ({ pet }) => {
+                pet.flipped = !pet.flipped;
+                say(`小人 ${pet.id} 已轉身`);
+                render(`more-${pet.id}`);
+            },
+            topmost: ({ pet }) => {
+                pet.topmost = !pet.topmost;
+                say(`小人 ${pet.id} · ${pet.topmost ? "已置頂" : "已取消置頂"}`);
+                render(`more-${pet.id}`);
+            },
+            "reset-position": ({ pet }) => {
+                pet.visible = true;
+                pet.outside = false;
+                say(`小人 ${pet.id} 已移回初始位置`);
+                render(`more-${pet.id}`);
+            },
+            remove: ({ pet, button }) => {
+                openDialog(`移除小人 ${pet.id}`, `<p>要移除這隻小人嗎？</p>
+                    <div><button class="primary" data-action="confirm-remove" data-id="${pet.id}">移除</button></div>`, button.closest("details").querySelector("summary"));
+            },
+            "confirm-remove": ({ pet }) => {
+                const index = state.pets.indexOf(pet);
+                state.pets.splice(index, 1);
+                state.photo.delete(pet.id);
+                if (state.selected === pet.id) {
+                    state.selected = state.pets[Math.max(0, index - 1)].id;
+                    state.spoken = null;
+                }
+                dialog.close();
+                say(`已移除小人 ${pet.id}`);
+                render(`pet-${state.selected}`);
+            },
+            settings: () => openDialog("設定", '<p class="muted">正式主視窗從這裡開啟現有設定，調整一般、外觀和語音與字幕選項。</p>'),
+            resources: () => {
+                const missing = ["empty", "voice"].includes(state.scenario);
+                openDialog("資源管理", missing
+                    ? `<p class="muted">${state.scenario === "empty" ? "尚未安裝角色資源。" : "日語配音尚未安裝。"}</p><div><button class="primary" data-action="install">模擬下載資源</button></div>`
+                    : '<p class="muted">已安裝角色資源及日語配音。正式主視窗會開啟現有資源管理分頁。</p>');
+            },
+            install: () => {
+                dialog.close();
+                scenarioControl.value = "ready";
+                state.scenario = "ready";
+                say("已模擬下載及載入資源");
+                render();
+            },
+            "close-dialog": () => dialog.close(),
+            outside: () => {
+                getSelected().outside = true;
+                say("小人已移出活動範圍");
+                render("return-range");
+            },
+            "return-range": () => {
+                getSelected().outside = false;
+                say("小人已移回活動範圍");
+                render("outside");
+            },
+            listen: () => {
+                state.spoken = ((state.spoken ?? -1) + 1) % lines.length;
+                rememberLine(state.spoken);
+                render();
+            },
+            replay: ({ id }) => {
+                rememberLine(id);
+                render();
+            },
+            favorite: ({ id, button }) => {
+                if (state.favorites.delete(id)) {
+                    say("已取消收藏");
+                    if (button.dataset.key === `favorite-saved-${id}`) {
+                        render(`favorite-recent-${id}`);
+                        return;
+                    }
+                } else {
+                    state.favorites.add(id);
+                    say("已加入語音收藏");
+                }
+                render();
+            },
+            interaction: () => {
+                const next = ((state.recent[0] ?? -1) + 1) % lines.length;
+                const favorites = [...state.favorites];
+                rememberLine(state.prioritize && favorites.length ? favorites[next % favorites.length] : next);
+                render();
+            },
+            restart: () => simulateRestart(false),
+            "next-day": () => simulateRestart(true),
+            greet: () => {
+                const pet = getSelected();
+                const other = state.pets.find(candidate => candidate.id !== pet.id && shown(candidate) && candidate.greets);
+                say(shown(pet) && pet.greets && other
+                    ? `小人 ${pet.id} 和小人 ${other.id} 轉向彼此打招呼`
+                    : "需要兩隻可見且已允許互動的小人");
+            },
+            "photo-turn": ({ id }) => {
+                const entry = state.photo.get(id);
+                entry.flipped = !entry.flipped;
+                render();
+            },
+            export: () => openDialog("匯出透明 PNG",
+                '<p class="muted">合照已準備好。正式版會開啟儲存視窗，選擇檔名與位置。</p><div><button class="primary" data-action="finish-export">模擬儲存</button></div>'),
+            "finish-export": () => {
+                dialog.close();
+                say("已模擬匯出透明 PNG");
+            }
+        };
+
+        document.addEventListener("error", event => {
+            const image = event.target;
+            if (image instanceof HTMLImageElement && image.hasAttribute("data-art")) {
+                image.removeAttribute("data-art");
+                image.classList.add("fallback");
+                image.src = icon;
+            }
+        }, true);
+
+        document.addEventListener("click", event => {
+            const button = event.target.closest("button[data-action]");
+            if (button) {
+                const { action, value } = button.dataset;
+                const id = Number(button.closest("[data-id]")?.dataset.id);
+                const pet = state.pets.find(candidate => candidate.id === id);
+                actions[action]({ id, value, pet, button });
+            }
+            for (const menu of main.querySelectorAll(".more[open]")) {
+                if (!menu.contains(event.target)) {
+                    menu.open = false;
+                }
+            }
+        });
+
+        document.addEventListener("keydown", event => {
+            if (event.key === "Escape" && !dialog.open) {
+                const menu = main.querySelector(".more[open]");
+                if (menu) {
+                    menu.open = false;
+                    menu.querySelector("summary").focus();
+                }
+            }
+        });
+
+        document.querySelector("#phase").addEventListener("change", event => {
+            state.all = event.target.value === "all";
+            if (!state.all && ["layout", "photo"].includes(state.page)) {
+                navigate("pets");
+            } else {
+                render();
+            }
+        });
+
+        scenarioControl.addEventListener("change", event => {
+            state.scenario = event.target.value;
+            say(modeHints[state.mode]);
+            render();
+        });
+
+        main.addEventListener("change", event => {
+            const { field, id } = event.target.dataset;
+            const { value, checked: enabled } = event.target;
+            const pet = getSelected();
+            switch (field) {
+                case "pose":
+                case "range":
+                case "monitor":
+                case "corner":
+                    pet[field] = value;
+                    if (field !== "pose") {
+                        pet.outside = false;
+                    }
+                    break;
+                case "greets":
+                    pet.greets = enabled;
+                    break;
+                case "prioritize":
+                case "saveLayout":
+                case "rotation":
+                    state[field] = enabled;
+                    break;
+                case "candidate":
+                    if (enabled) {
+                        state.candidates.add(outfits[Number(id)]);
+                    } else {
+                        state.candidates.delete(outfits[Number(id)]);
+                    }
+                    break;
+                case "photo-include":
+                    state.photo.get(Number(id)).included = enabled;
+                    break;
+                case "photo-pose":
+                    state.photo.get(Number(id)).pose = value;
+                    break;
+            }
+            if (field !== "photo-x" && field !== "photo-y") {
+                render();
+            }
+        });
+
+        main.addEventListener("input", event => {
+            const { field, id } = event.target.dataset;
+            if (field === "photo-x" || field === "photo-y") {
+                const entry = state.photo.get(Number(id));
+                const image = main.querySelector(`[data-photo="${id}"]`);
+                const axis = field === "photo-x" ? "x" : "y";
+                entry[axis] = Number(event.target.value);
+                image.style[axis === "x" ? "left" : "top"] = `${entry[axis]}%`;
+            }
+        });
+
+        render();
+    </script>
+</body>
+</html>

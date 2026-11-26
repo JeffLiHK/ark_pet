@@ -2,6 +2,8 @@
 
 霍爾海雅的 Q 版小人是主要畫面。平時只在桌角待機，摸摸、拖曳和換裝都從桌面直接操作。衣櫃和設定按需要打開。首版驗證預設造型與「歷世流風」。[Prototype 產品需求](prototype-plan.md) · [程式架構](architecture.md)
 
+雙擊通知區開啟「我的小人」及相關新功能的規劃，見[主介面設計規格](main-interface.md)與[互動原型](main-interface-preview.html)。
+
 ## 視覺方向
 
 參考《明日方舟》首頁中低彩度的塊面、清楚的分隔線，以及用少量重點色標出操作狀態的做法。衣櫃採本專案的單欄構圖，使用石墨灰面板與青綠選取色，讓霍爾海雅的立繪成為畫面重心。圖示使用簡單的通用符號，按鈕以繁體中文標示。[明日方舟首頁介面參考](https://arknights.wiki.gg/wiki/Home_Screen/UI) · [官方「歷世流風」展示](https://www.youtube.com/watch?v=jKCdH0gqC-w)
