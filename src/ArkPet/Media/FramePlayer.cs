@@ -42,6 +42,7 @@ internal sealed class FramePlayer
     }
 
     internal bool HasOutfit => _outfit is not null;
+    internal bool HasTouchAnimation => _outfit?.Touch is not null;
     internal bool CanWalk => _outfit?.Move is not null;
     internal bool CanSleep => _outfit?.Sleep is not null;
     internal bool CanSit => _outfit?.Sit is not null;

@@ -15,7 +15,7 @@ internal sealed class TrayIcon : IDisposable
     private readonly NotifyIcon _icon;
     private Icon? _characterImage;
 
-    public TrayIcon(PetWindow pet, Action exit, Action openSettings, Action? openWardrobe,
+    public TrayIcon(PetWindow pet, Action exit, Action openSettings, Action openMain, Action? openWardrobe,
         Action addPet, Func<IEnumerable<TrayPet>> getPets, BitmapSource? appIcon)
     {
         if (appIcon is null)
@@ -32,9 +32,9 @@ internal sealed class TrayIcon : IDisposable
         var visibilityItem = new ToolStripMenuItem();
         visibilityItem.Click += (_, _) =>
         {
-            if (pet.IsVisible)
+            if (pet.WantsVisible)
             {
-                pet.Hide();
+                pet.SetVisibilityPreference(false);
             }
             else
             {
@@ -53,6 +53,7 @@ internal sealed class TrayIcon : IDisposable
         var addPetItem = new ToolStripMenuItem("新增一隻小人", null, (_, _) => addPet());
         var petsItem = new ToolStripMenuItem("管理小人");
 
+        _menu.Items.Add(new ToolStripMenuItem("開啟主介面", null, (_, _) => openMain()));
         _menu.Items.Add(visibilityItem);
         if (openWardrobe is not null)
         {
@@ -68,7 +69,7 @@ internal sealed class TrayIcon : IDisposable
             addPetItem, petsItem, new ToolStripSeparator(), exitItem]);
         _menu.Opening += (_, _) =>
         {
-            visibilityItem.Text = pet.IsVisible ? "隱藏小人" : "顯示小人";
+            visibilityItem.Text = pet.WantsVisible ? "隱藏小人" : "顯示小人";
             visibilityItem.Enabled = pet.HasOutfit;
             resetItem.Enabled = pet.HasOutfit;
             addPetItem.Enabled = pet.HasOutfit;
@@ -83,7 +84,7 @@ internal sealed class TrayIcon : IDisposable
         {
             if (e.Button == MouseButtons.Left)
             {
-                pet.ShowPet();
+                openMain();
             }
         };
     }
@@ -100,11 +101,11 @@ internal sealed class TrayIcon : IDisposable
         foreach (TrayPet pet in pets)
         {
             var entry = new ToolStripMenuItem(pet.Name);
-            entry.DropDownItems.Add(pet.Window.IsVisible ? "隱藏" : "顯示", null, (_, _) =>
+            entry.DropDownItems.Add(pet.Window.WantsVisible ? "隱藏" : "顯示", null, (_, _) =>
             {
-                if (pet.Window.IsVisible)
+                if (pet.Window.WantsVisible)
                 {
-                    pet.Window.Hide();
+                    pet.Window.SetVisibilityPreference(false);
                 }
                 else
                 {

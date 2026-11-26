@@ -1,0 +1,399 @@
+<Window x:Class="ArtPet.Windows.Desktop.MainInterfaceWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:ClassModifier="internal" Title="我的小人 · ArkPet" Width="1040" Height="700" MinWidth="380" MinHeight="330"
+        Background="#151B20" Foreground="#F2F5F7" FontFamily="Microsoft JhengHei UI" FontSize="14"
+        SizeChanged="ResizeLayout" StateChanged="WindowStateChanged">
+    <Window.Resources>
+        <DrawingBrush x:Key="PhotoCheckerboard" TileMode="Tile" Viewport="0,0,24,24"
+                      ViewportUnits="Absolute" Viewbox="0,0,24,24" ViewboxUnits="Absolute">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#35424A" Geometry="M0,0 H24 V24 H0 Z" />
+                    <GeometryDrawing Brush="#27323A" Geometry="M0,0 H12 V12 H0 Z M12,12 H24 V24 H12 Z" />
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+        <SolidColorBrush x:Key="Accent" Color="#72DDC3" />
+        <SolidColorBrush x:Key="Muted" Color="#B7C4CC" />
+        <SolidColorBrush x:Key="Warning" Color="#FFCB8B" />
+        <Style x:Key="FocusRing">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Border Margin="-2" BorderThickness="2" BorderBrush="#C3D7F7" CornerRadius="5" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="#F2F5F7" />
+            <Setter Property="Background" Value="#222B33" />
+            <Setter Property="BorderBrush" Value="#465963" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="9,5" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Margin" Value="0,0,6,4" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Outline" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" RecognizesAccessKey="True" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Outline" Property="BorderBrush" Value="#72DDC3" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Outline" Property="Opacity" Value=".75" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Outline" Property="Opacity" Value=".55" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="{StaticResource Accent}" />
+            <Setter Property="Foreground" Value="#102921" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="Margin" Value="0,0,6,4" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#F2F5F7" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Margin" Value="0,4,0,8" />
+        </Style>
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,4,0,5" />
+        </Style>
+        <Style x:Key="Panel" TargetType="Border">
+            <Setter Property="Background" Value="#1D252C" />
+            <Setter Property="BorderBrush" Value="#3B4B53" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="13" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Card" Background="#1D252C" CornerRadius="7" BorderBrush="#3B4B53"
+                                BorderThickness="1" Padding="6">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#72DDC3" />
+                                <Setter TargetName="Card" Property="Background" Value="#202E32" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#9ACABD" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <DataTemplate x:Key="PetCard">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="72" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border Background="#324945" CornerRadius="4" Margin="0,0,8,0" ClipToBounds="True">
+                    <Image Source="{Binding Portrait}" Height="100" Stretch="Uniform" />
+                </Border>
+                <StackPanel Grid.Column="1">
+                    <Button Click="OpenPetDetails" Content="{Binding Name}" ToolTip="{Binding Name}"
+                            HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Padding="0"
+                            FontWeight="Bold" Margin="0" />
+                    <TextBlock Text="{Binding OutfitName}" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Status}" Foreground="{StaticResource Accent}" Margin="0,3" />
+                    <WrapPanel>
+                        <Button Content="換裝" Click="OpenWardrobe" />
+                        <Button Content="{Binding VisibilityAction}" Click="ToggleVisibility" IsEnabled="{Binding HasOutfit}" />
+                        <Button Content="更多" Click="OpenMore" AutomationProperties.Name="更多小人操作" />
+                    </WrapPanel>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="VoiceRow">
+            <Border Style="{StaticResource Panel}" Padding="8" Margin="0,0,0,6">
+                <DockPanel LastChildFill="True">
+                    <Button DockPanel.Dock="Right" Content="{Binding FavoriteAction}" Click="ToggleFavorite" Margin="6,0,0,0" />
+                    <Button DockPanel.Dock="Right" Content="試聽" Click="ReplayVoice" IsEnabled="{Binding CanPlay}"
+                            ToolTip="{Binding Availability}" ToolTipService.ShowOnDisabled="True" Margin="6,0,0,0" />
+                    <TextBlock Text="{Binding Label}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                </DockPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Border BorderBrush="#3B4B53" BorderThickness="0,0,0,1" Padding="14,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="BrandColumn" Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="Brand" Text="ArkPet" FontFamily="Segoe UI" FontWeight="Bold" FontSize="20" VerticalAlignment="Center" />
+                <WrapPanel x:Name="ScenarioNavigation" Grid.Column="1" KeyboardNavigation.TabNavigation="Continue">
+                    <Button x:Name="Daily" Content="日常" Tag="Daily" Click="SwitchScenario" />
+                    <Button x:Name="FocusMode" Content="專注" Tag="Focus" Click="SwitchScenario" />
+                    <Button x:Name="HideMode" Content="暫時隱藏" Tag="Hidden" Click="SwitchScenario" />
+                </WrapPanel>
+                <WrapPanel Grid.Column="2" HorizontalAlignment="Right">
+                    <Button Content="設定" Click="SettingsClick" />
+                    <Button Content="資源管理" Click="ResourcesClick" />
+                </WrapPanel>
+            </Grid>
+        </Border>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="RailColumn" Width="156" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Border x:Name="Rail" Grid.RowSpan="2" BorderBrush="#3B4B53" BorderThickness="0,0,1,0" Padding="10,12">
+                <WrapPanel x:Name="PageNavigation" Orientation="Vertical">
+                    <Button x:Name="PetsPageButton" Content="我的小人" Tag="Pets" Click="SwitchPage" />
+                    <Button x:Name="VoicesPageButton" Content="語音收藏" Tag="Voices" Click="SwitchPage" />
+                    <Button x:Name="LayoutPageButton" Content="桌面配置" Tag="Layout" Click="SwitchPage" />
+                    <Button x:Name="PhotoPageButton" Content="桌面合照" Tag="Photo" Click="SwitchPage" />
+                </WrapPanel>
+            </Border>
+            <Grid x:Name="Pages" Grid.Column="1" Grid.RowSpan="2" Margin="18,14">
+                <Grid x:Name="PetsPage">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition x:Name="ListColumn" Width="308" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <DockPanel x:Name="PetListPanel">
+                        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                            <TextBlock Text="我的小人" Style="{StaticResource Heading}" Margin="0,0,12,4" VerticalAlignment="Center" />
+                            <Button x:Name="AddButton" Content="新增小人" Style="{StaticResource PrimaryButton}" Click="AddPet" />
+                        </WrapPanel>
+                        <Border x:Name="EmptyResources" DockPanel.Dock="Top" Style="{StaticResource Panel}" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock Text="尚未安裝角色資源" Style="{StaticResource Label}" />
+                                <TextBlock x:Name="AssetStatusText" Foreground="{StaticResource Warning}" TextWrapping="Wrap" Margin="0,0,0,8"
+                                           AutomationProperties.LiveSetting="Polite" />
+                                <Button Content="下載角色資源" Click="DownloadResources" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Border>
+                        <ListBox x:Name="PetList" ItemTemplate="{StaticResource PetCard}" SelectionChanged="PetSelected"
+                                 Background="Transparent" BorderThickness="0" Foreground="#F2F5F7"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="桌面小人" />
+                    </DockPanel>
+                    <ScrollViewer x:Name="DetailsScroll" Grid.Column="1" Margin="16,0,0,0" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="DetailsPanel">
+                            <Button x:Name="BackButton" Content="返回我的小人" Visibility="Collapsed" Click="BackToPets" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="PetHeading" Style="{StaticResource Heading}" TextWrapping="Wrap" />
+                            <Border x:Name="EmptyOutfit" Style="{StaticResource Panel}">
+                                <StackPanel>
+                                    <TextBlock Text="尚未選取造型" Style="{StaticResource Label}" />
+                                    <Button Content="選擇造型" Click="OpenWardrobe" HorizontalAlignment="Left" />
+                                </StackPanel>
+                            </Border>
+                            <StackPanel x:Name="OutfitDetails">
+                                <Border Height="215" ClipToBounds="True" CornerRadius="7" BorderBrush="#4D6A66" BorderThickness="1" Margin="0,0,0,10">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#304843" Offset="0" />
+                                            <GradientStop Color="#18262C" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <Grid>
+                                        <Image x:Name="PreviewImage" Margin="10" Stretch="Uniform" />
+                                        <TextBlock x:Name="PreviewLabel" VerticalAlignment="Bottom" Margin="10" Foreground="{StaticResource Muted}" />
+                                    </Grid>
+                                </Border>
+                                <Border Style="{StaticResource Panel}">
+                                    <StackPanel>
+                                        <TextBlock Text="動作選擇" Style="{StaticResource Label}" />
+                                        <ComboBox x:Name="PosePicker" DisplayMemberPath="Name" SelectionChanged="PoseChanged"
+                                                  AutomationProperties.Name="預覽動作" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Panel}">
+                                    <StackPanel>
+                                        <TextBlock Text="語音試聽" Style="{StaticResource Label}" />
+                                        <ComboBox x:Name="PreviewVoicePicker" DisplayMemberPath="Label" SelectionChanged="VoiceSelectionChanged"
+                                                  AutomationProperties.Name="試聽台詞" />
+                                        <WrapPanel>
+                                            <Button x:Name="PlayPreviewVoice" Content="播放" Click="PlayPreview" />
+                                            <Button x:Name="FavoritePreviewVoice" Content="收藏" Click="TogglePreviewFavorite" />
+                                            <Button Content="資源管理" Click="ResourcesClick" />
+                                        </WrapPanel>
+                                        <TextBlock x:Name="PreviewVoiceStatus" Foreground="{StaticResource Muted}" TextWrapping="Wrap" />
+                                        <TextBlock x:Name="PreviewSubtitle" Foreground="{StaticResource Accent}" TextWrapping="Wrap"
+                                                   AutomationProperties.LiveSetting="Polite" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Panel}">
+                                    <StackPanel>
+                                        <TextBlock Text="桌面活動範圍" Style="{StaticResource Label}" />
+                                        <ComboBox x:Name="ScopePicker" SelectionChanged="ActivityChanged" AutomationProperties.Name="活動範圍">
+                                            <ComboBoxItem Content="目前螢幕" />
+                                            <ComboBoxItem Content="指定螢幕" />
+                                            <ComboBoxItem Content="指定螢幕的一角" />
+                                        </ComboBox>
+                                        <ComboBox x:Name="MonitorPicker" DisplayMemberPath="Label" SelectionChanged="ActivityChanged"
+                                                  AutomationProperties.Name="指定螢幕" />
+                                        <ComboBox x:Name="CornerPicker" SelectionChanged="ActivityChanged" AutomationProperties.Name="指定角落">
+                                            <ComboBoxItem Content="左上角" />
+                                            <ComboBoxItem Content="右上角" />
+                                            <ComboBoxItem Content="左下角" />
+                                            <ComboBoxItem Content="右下角" />
+                                        </ComboBox>
+                                        <TextBlock x:Name="RangeStatus" Foreground="{StaticResource Warning}" TextWrapping="Wrap" Margin="0,3,0,5" />
+                                        <Button Content="移回活動範圍" Click="ReturnToActivityArea" HorizontalAlignment="Left" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource Panel}">
+                                    <StackPanel>
+                                        <TextBlock Text="小人互動" Style="{StaticResource Label}" />
+                                        <CheckBox x:Name="PetInteractionEnabled" Content="允許小人互動" Click="PetInteractionClick" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+                <ScrollViewer x:Name="VoicesPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="語音收藏" Style="{StaticResource Heading}" />
+                        <CheckBox x:Name="PreferFavorites" Content="互動時優先播放收藏" Click="PreferFavoritesClick" />
+                        <TextBlock Text="角色" Style="{StaticResource Label}" />
+                        <ComboBox x:Name="VoiceCharacterPicker" DisplayMemberPath="Name" SelectionChanged="VoiceCharacterChanged"
+                                  AutomationProperties.Name="收藏角色" />
+                        <TextBlock x:Name="LibrarySubtitle" Foreground="{StaticResource Accent}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock x:Name="EmptyFavorites" Text="還沒有收藏，可從最近播放或小人詳情的試聽加入。" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,8" />
+                        <ItemsControl x:Name="FavoritesList" ItemTemplate="{StaticResource VoiceRow}" />
+                        <TextBlock Text="最近播放" Style="{StaticResource Heading}" Margin="0,12,0,8" />
+                        <TextBlock x:Name="EmptyRecent" Text="尚未播放語音。" Foreground="{StaticResource Muted}" />
+                        <ItemsControl x:Name="RecentList" ItemTemplate="{StaticResource VoiceRow}" />
+                    </StackPanel>
+                </ScrollViewer>
+                <ScrollViewer x:Name="LayoutPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="桌面配置" Style="{StaticResource Heading}" />
+                        <Border Style="{StaticResource Panel}">
+                            <StackPanel>
+                                <CheckBox x:Name="RememberLayout" Content="記住桌面配置" Click="RememberLayoutClick" />
+                                <TextBlock Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                           Text="下次啟動時恢復小人、造型和桌面位置。" />
+                                <ItemsControl x:Name="LayoutNotices" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Foreground="{StaticResource Warning}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource Panel}">
+                            <StackPanel>
+                                <TextBlock Text="今日輪值" Style="{StaticResource Label}" />
+                                <CheckBox x:Name="RotationEnabled" Content="每天首次啟動時替主要小人選一套造型" Click="RotationEnabledClick" />
+                                <TextBlock x:Name="RotationStatusText" Foreground="{StaticResource Warning}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                <TextBlock x:Name="RotationCount" Foreground="{StaticResource Muted}" Margin="0,0,0,6" />
+                                <ComboBox x:Name="RotationCharacterPicker" DisplayMemberPath="Name" SelectionChanged="RotationCharacterChanged"
+                                          AutomationProperties.Name="輪值角色" />
+                                <ItemsControl x:Name="MissingRotationOutfits">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{Binding Label}" ToolTip="移除此輪值候選" Click="RemoveRotationCandidate"
+                                                    HorizontalAlignment="Left" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <ItemsControl x:Name="RotationOutfits">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Content="{Binding Label}" IsChecked="{Binding Included, Mode=OneTime}"
+                                                      Click="RotationCandidateClick" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+                <ScrollViewer x:Name="PhotoPage" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <WrapPanel>
+                            <TextBlock Text="桌面合照" Style="{StaticResource Heading}" Margin="0,0,12,8" />
+                            <Button x:Name="ExportPhoto" Content="匯出透明 PNG" Click="ExportPhotoClick"
+                                    Style="{StaticResource PrimaryButton}" />
+                        </WrapPanel>
+                        <Viewbox Stretch="Uniform" StretchDirection="DownOnly" MaxHeight="365">
+                            <Grid Width="960" Height="540" Background="{StaticResource PhotoCheckerboard}">
+                                <Image x:Name="PhotoPreview" Stretch="Fill" AutomationProperties.Name="透明背景合照預覽" />
+                            </Grid>
+                        </Viewbox>
+                        <TextBlock x:Name="PhotoStatus" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                   Margin="0,9,0,8" AutomationProperties.LiveSetting="Polite" />
+                        <ItemsControl x:Name="PhotoPets">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Style="{StaticResource Panel}">
+                                        <StackPanel>
+                                            <CheckBox IsChecked="{Binding Included}" Content="{Binding Title}" />
+                                            <StackPanel IsEnabled="{Binding Included}">
+                                                <WrapPanel>
+                                                    <ComboBox ItemsSource="{Binding Poses}" SelectedItem="{Binding SelectedPose}"
+                                                              DisplayMemberPath="Name" MinWidth="112" AutomationProperties.Name="合照姿勢" />
+                                                    <CheckBox IsChecked="{Binding Flipped}" Content="反轉方向" VerticalAlignment="Center" />
+                                                </WrapPanel>
+                                                <TextBlock Text="水平位置" Style="{StaticResource Label}" />
+                                                <Slider Value="{Binding X}" Minimum="15" Maximum="85" FocusVisualStyle="{StaticResource FocusRing}"
+                                                        AutomationProperties.Name="合照水平位置" />
+                                                <TextBlock Text="垂直位置" Style="{StaticResource Label}" />
+                                                <Slider Value="{Binding Y}" Minimum="35" Maximum="90" FocusVisualStyle="{StaticResource FocusRing}"
+                                                        AutomationProperties.Name="合照垂直位置" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

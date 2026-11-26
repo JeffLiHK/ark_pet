@@ -253,7 +253,7 @@ internal partial class SettingsWindow : Window
         try
         {
             await Task.Run(() => ReleaseUpdater.InstallAsync(update, token), token);
-            Application.Current.Shutdown();
+            ((App)Application.Current).ExitApplication();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -275,31 +275,50 @@ internal partial class SettingsWindow : Window
         }
     }
 
+    internal event Action<string>? AssetStatusChanged;
+    internal event Action? VoiceAssetsChanged;
+
+    internal void OpenResources(bool download)
+    {
+        ResourceTab.IsSelected = true;
+        if (download && !_installing)
+        {
+            CheckForAssets(this, new RoutedEventArgs());
+        }
+    }
+
+    private void SetAssetStatus(string message)
+    {
+        AssetStatus.Text = message;
+        AssetStatusChanged?.Invoke(message);
+    }
+
     private async void CheckForAssets(object sender, RoutedEventArgs e)
     {
         CancellationToken token = _updates.Token;
         _installing = true;
         RefreshUpdateButtons();
         RefreshResourceControls();
-        AssetStatus.Text = "正在檢查資源…";
+        SetAssetStatus("正在檢查資源…");
         try
         {
             AssetReleaseCheck result = await AssetReleaseUpdater.CheckAsync(_installedArtwork, token);
             token.ThrowIfCancellationRequested();
             if (result.Update is not { } update)
             {
-                AssetStatus.Text = result.Message;
+                SetAssetStatus(result.Message);
                 RefreshAssetVersion();
                 return;
             }
 
-            var progress = new Progress<string>(message => AssetStatus.Text = message);
+            var progress = new Progress<string>(SetAssetStatus);
             bool hardwareAcceleration = _settings.HardwareAccelerationEnabled;
             await Task.Run(() => AssetReleaseUpdater.InstallAsync(update, _installedArtwork, progress, token,
                 hardwareAcceleration), token);
             await LoadInstalledModelsAsync(token);
             RefreshAssetVersion();
-            AssetStatus.Text = "全部模型已下載。可在這裡建置，衣櫃將於下次啟動更新。";
+            SetAssetStatus("全部模型已下載。請重新啟動以載入新的角色清單。");
+            VoiceAssetsChanged?.Invoke();
             if (update.Manifest.HasSplitResources && !VoiceLibrary.HasChoice(PetSettings.Japanese))
             {
                 VoicePackStatus.Text = "日語配音尚未安裝，可在此重試下載。";
@@ -307,13 +326,13 @@ internal partial class SettingsWindow : Window
         }
         catch (InvalidDataException error)
         {
-            AssetStatus.Text = error.Message;
+            SetAssetStatus(error.Message);
         }
         catch (Exception error) when (error is HttpRequestException or JsonException or OperationCanceledException || CharacterPack.IsAssetError(error))
         {
             if (!token.IsCancellationRequested)
             {
-                AssetStatus.Text = "無法下載或安裝資源，請確認網路連線及資料夾寫入權限後再試。";
+                SetAssetStatus("無法下載或安裝資源，請確認網路連線及資料夾寫入權限後再試。");
             }
         }
         finally
@@ -380,6 +399,7 @@ internal partial class SettingsWindow : Window
                 var (version, alreadyCurrent) = await Task.Run(() => AssetReleaseUpdater.DownloadVoiceAsync(language, progress, token), token);
                 VoicePackStatus.Text = alreadyCurrent ? $"配音 {version} 已是最新版。" : $"配音 {version} 已可使用。";
             }
+            VoiceAssetsChanged?.Invoke();
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {

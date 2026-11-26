@@ -26,6 +26,16 @@ public partial class App : Application
     private AssetSnapshot? _artwork;
     private SettingsWindow? _settingsWindow;
     private bool _exiting;
+    private MainInterfaceWindow? _mainInterface;
+    private string? _assetStatus;
+    private readonly List<VoiceFavorite> _recentVoices = [];
+    internal DesktopScenario Scenario { get; private set; }
+    internal PetSettings Settings => _settings;
+    internal IReadOnlyList<CharacterPack> InstalledPacks => _installedPacks;
+    internal IEnumerable<PetEntry> Pets => _pets.OrderBy(pet => pet.Slot);
+    internal IReadOnlyList<VoiceFavorite> RecentVoices => _recentVoices;
+    internal string? AssetStatus => _assetStatus;
+    internal string? VoiceRoot => _artwork?.VoiceRoot;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -65,15 +75,17 @@ public partial class App : Application
         var primary = RegisterPet(session, 0);
         _primary = primary;
         MainWindow = primary.Window;
-        await LoadStartupOutfitAsync(session);
+        await RestoreDesktopAsync(primary, token);
         if (_exiting)
         {
             return;
         }
 
-        _tray = new TrayIcon(primary.Window, ExitApplication, OpenSettings, WardrobeCommand(primary),
+        _assetStatus = setupStatus;
+        _tray = new TrayIcon(primary.Window, ExitApplication, OpenSettings, OpenMainInterface, WardrobeCommand(primary),
             () => AddPet(primary), GetTrayPets, _artwork?.AppIcon);
-        primary.Window.ShowPet();
+        _desktopReady = true;
+        SavePendingDesktop();
         if (setupStatus is not null)
         {
             _tray.ShowSetupStatus(setupStatus);
@@ -218,6 +230,15 @@ public partial class App : Application
         var pet = new PetEntry(slot, window, session);
         _pets.Add(pet);
         window.ApplySettings(_settings);
+        window.SetScenario(Scenario);
+        window.DesktopStateChanged += (_, _) =>
+        {
+            _mainInterface?.Refresh();
+            ScheduleDesktopSave();
+        };
+        window.LocationChanged += (_, _) => ScheduleDesktopSave();
+        window.VoicePlayed += RecordVoice;
+        window.DragCompleted += (_, _) => TryPetInteraction(pet);
         window.AddSettingsCommand(OpenSettings);
         window.AddPetCommands(() => AddPet(pet), slot == 0 ? null : () => RemovePet(pet));
         if (_installedPacks.Length > 0)
@@ -225,11 +246,20 @@ public partial class App : Application
             window.AddWardrobeCommand(() => OpenWardrobe(pet));
         }
 
-        session.Changed += (_, _) => DisplayOutfit(pet);
+        session.Changed += (_, _) =>
+        {
+            DisplayOutfit(pet);
+            _mainInterface?.Refresh();
+        };
         window.Closed += (_, _) =>
         {
             _pets.Remove(pet);
             session.Dispose();
+            _mainInterface?.Refresh();
+            if (pet != _primary)
+            {
+                ScheduleDesktopSave();
+            }
             if (pet == _primary)
             {
                 ExitApplication();
@@ -239,12 +269,12 @@ public partial class App : Application
         return pet;
     }
 
-    private void AddPet(PetEntry source)
+    internal PetEntry? AddPet(PetEntry source, bool select = false)
     {
         if (source.Session.Outfit is null)
         {
             OpenWardrobe(source);
-            return;
+            return null;
         }
 
         var occupied = _pets.Select(pet => pet.Slot).ToHashSet();
@@ -254,13 +284,38 @@ public partial class App : Application
             slot++;
         }
 
-        RegisterPet(source.Session.Fork(), slot).Window.ShowPet();
+        PetEntry pet = RegisterPet(source.Session.Fork(), slot);
+        pet.Window.ShowPet();
+        if (select)
+        {
+            _mainInterface?.SelectPet(pet);
+        }
+        return pet;
     }
 
-    private static void RemovePet(PetEntry pet)
+    internal static void RemovePet(PetEntry pet)
     {
         pet.Wardrobe?.Close();
         pet.Window.Close();
+    }
+
+    private void TryPetInteraction(PetEntry source)
+    {
+        if (!source.Window.CanInteractWithPet || source.Window.DesktopFeet is not { } feet)
+        {
+            return;
+        }
+
+        var nearest = _pets.Where(pet => pet != source && pet.Window.IsVisible)
+            .Select(pet => (pet.Window, Feet: pet.Window.DesktopFeet))
+            .Where(pet => pet.Feet.HasValue)
+            .OrderBy(pet => (pet.Feet!.Value - feet).LengthSquared)
+            .FirstOrDefault();
+        if (nearest.Window is { CanInteractWithPet: true } other && nearest.Feet is { } otherFeet)
+        {
+            source.Window.InteractWithPet(otherFeet.X - feet.X);
+            other.InteractWithPet(feet.X - otherFeet.X);
+        }
     }
 
     private Action? WardrobeCommand(PetEntry pet) => _installedPacks.Length > 0 ? () => OpenWardrobe(pet) : null;
@@ -277,10 +332,15 @@ public partial class App : Application
         }
 
         pet.Displayed = outfit;
+        if (_desktopReady)
+        {
+            RecordManualRotation(pet, new OutfitKey(pack.Id, outfit.Definition.Id));
+            ScheduleDesktopSave();
+        }
         bool firstOutfit = !pet.Window.HasOutfit;
         pet.Window.SetVoiceCharacter(pack.Id);
         pet.Window.SetOutfit(outfit);
-        if (firstOutfit && _tray is not null)
+        if (firstOutfit && _tray is not null && pet.Window.WantsVisible)
         {
             pet.Window.ShowPet();
         }
@@ -301,10 +361,18 @@ public partial class App : Application
         }
     }
 
-    private void OpenSettings()
+    internal void OpenSettings() => ShowSettings();
+
+    internal void OpenResources(bool download = false) => ShowSettings(resources: true, download);
+
+    private void ShowSettings(bool resources = false, bool download = false)
     {
         if (_settingsWindow is { } open)
         {
+            if (resources)
+            {
+                open.OpenResources(download);
+            }
             open.BringToFront();
             return;
         }
@@ -315,30 +383,116 @@ public partial class App : Application
             {
                 pet.Window.StopVoice();
             }
+            _mainInterface?.StopVoice();
         })
         {
             Icon = _artwork?.AppIcon ?? _primary?.Window.Icon
         };
         _settingsWindow = settingsWindow;
-        settingsWindow.SettingsSelected += settings =>
+        settingsWindow.SettingsSelected += settings => UpdateSettings(settings with
         {
-            _settings = settings;
-            foreach (PetEntry entry in _pets)
-            {
-                entry.Window.ApplySettings(settings);
-            }
-
-            if (!_settingsStore.TrySave(settings))
-            {
-                _tray?.ShowSettingsSaveError();
-            }
+            VoiceFavorites = _settings.VoiceFavorites,
+            PreferFavoriteVoices = _settings.PreferFavoriteVoices,
+            RememberDesktopLayout = _settings.RememberDesktopLayout,
+            DesktopLayout = _settings.DesktopLayout,
+            DailyRotationEnabled = _settings.DailyRotationEnabled,
+            RotationCandidates = _settings.RotationCandidates,
+            DailyOutfit = _settings.DailyOutfit
+        }, applyToPets: true);
+        settingsWindow.VoiceAssetsChanged += () => _mainInterface?.RefreshVoiceAssets();
+        settingsWindow.AssetStatusChanged += message =>
+        {
+            _assetStatus = message;
+            _mainInterface?.Refresh();
         };
         settingsWindow.Closed += (_, _) => _settingsWindow = null;
         settingsWindow.Show();
+        if (resources)
+        {
+            settingsWindow.OpenResources(download);
+        }
         settingsWindow.BringToFront();
     }
 
-    private void OpenWardrobe(PetEntry pet)
+    private void OpenMainInterface()
+    {
+        if (_mainInterface is null)
+        {
+            _mainInterface = new MainInterfaceWindow(this) { Icon = _artwork?.AppIcon ?? _primary?.Window.Icon };
+            _mainInterface.Closed += (_, _) => _mainInterface = null;
+            _mainInterface.Show();
+        }
+
+        if (_mainInterface.WindowState == WindowState.Minimized)
+        {
+            _mainInterface.WindowState = WindowState.Normal;
+        }
+        MainInterfaceWindow window = _mainInterface;
+        window.Activate();
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_mainInterface == window)
+            {
+                window.Activate();
+            }
+        });
+    }
+
+    internal void SetScenario(DesktopScenario scenario)
+    {
+        Scenario = scenario;
+        foreach (PetEntry pet in _pets)
+        {
+            pet.Window.SetScenario(scenario);
+        }
+        _mainInterface?.Refresh();
+    }
+
+    internal void RecordVoice(string characterId, PetVoicePlayer.VoiceLine line)
+    {
+        _recentVoices.RemoveAll(voice => voice.CharacterId == characterId && voice.LineId == line.Id);
+        _recentVoices.Insert(0, new VoiceFavorite(characterId, line.Id, line.Subtitle));
+        if (_recentVoices.Count > 20)
+        {
+            _recentVoices.RemoveAt(20);
+        }
+        _mainInterface?.RefreshVoiceHistory();
+    }
+
+    internal void ToggleFavorite(VoiceFavorite voice)
+    {
+        VoiceFavorite[] remaining = _settings.VoiceFavorites
+            .Where(item => item.CharacterId != voice.CharacterId || item.LineId != voice.LineId).ToArray();
+        UpdateSettings(_settings with
+        {
+            VoiceFavorites = remaining.Length == _settings.VoiceFavorites.Length ? [.. remaining, voice] : remaining
+        });
+    }
+
+    internal void UpdateSettings(PetSettings settings, bool applyToPets = false)
+    {
+        _settings = settings;
+        foreach (PetEntry pet in _pets)
+        {
+            if (applyToPets)
+            {
+                pet.Window.ApplySettings(settings);
+            }
+            else
+            {
+                pet.Window.ApplyVoiceFavorites(settings);
+            }
+        }
+
+        SaveSettings();
+        if (applyToPets)
+        {
+            _mainInterface?.RefreshVoiceAssets();
+        }
+        _mainInterface?.RefreshVoiceHistory();
+    }
+
+    internal void OpenWardrobe(PetEntry pet)
     {
         if (pet.Wardrobe is { } open)
         {
@@ -360,18 +514,26 @@ public partial class App : Application
         wardrobe.ShowNear(pet.Window);
     }
 
-    private void ExitApplication()
+    internal void ExitApplication()
     {
         if (!_exiting)
         {
+            SavePendingDesktop();
             _exiting = true;
             Shutdown();
         }
     }
 
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        SavePendingDesktop();
+        base.OnSessionEnding(e);
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
         _exiting = true;
+        _desktopSave?.Stop();
         _startup.Cancel();
         _startup.Dispose();
         foreach (PetEntry pet in _pets)
@@ -384,8 +546,11 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private sealed record PetEntry(int Slot, PetWindow Window, PetSession Session)
+    internal sealed class PetEntry(int slot, PetWindow window, PetSession session)
     {
+        internal int Slot { get; } = slot;
+        internal PetWindow Window { get; } = window;
+        internal PetSession Session { get; } = session;
         internal LoadedOutfit? Displayed { get; set; }
         internal WardrobeWindow? Wardrobe { get; set; }
     }

@@ -82,7 +82,7 @@ public partial class PetWindow
         return _support?.Kind switch
         {
             DesktopSurfaceKind.Window => RoamingAction.Sit,
-            DesktopSurfaceKind.Taskbar when !Settings.FreeModeEnabled || !_player.CanWalk => RoamingAction.Sleep,
+            DesktopSurfaceKind.Taskbar when !WalkEnabled || !_player.CanWalk => RoamingAction.Sleep,
             _ => RoamingAction.Idle
         };
     }

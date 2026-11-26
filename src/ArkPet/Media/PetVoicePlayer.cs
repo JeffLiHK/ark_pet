@@ -36,7 +36,13 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
             : null;
     }
 
-    internal async Task PlayRandomAsync()
+    internal event Action<string, VoiceLine>? LinePlayed;
+
+    internal Task<VoiceLine[]> GetAvailableAsync() => _selection is { } selection
+        ? Task.Run(() => ReadLines(selection.Character, managedVoiceRoot, selection.Voice, selection.Subtitle))
+        : Task.FromResult(Array.Empty<VoiceLine>());
+
+    internal async Task PlayRandomAsync(VoiceFavorite[] favorites)
     {
         if (IsPlaying || _selection is not { } selection)
         {
@@ -64,7 +70,15 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
             return;
         }
 
-        VoiceLine line = available[Random.Shared.Next(available.Length)];
+        VoiceLine[] preferred = available.Where(line =>
+            favorites.Any(favorite => favorite.CharacterId == selection.Character && favorite.LineId == line.Id)).ToArray();
+        VoiceLine[] choices = preferred.Length > 0 ? preferred : available;
+        PlayLine(selection.Character, choices[Random.Shared.Next(choices.Length)]);
+    }
+
+    internal void PlayLine(string characterId, VoiceLine line)
+    {
+        Stop();
         var player = new MediaPlayer { Volume = _volume };
         _player = player;
         player.MediaOpened += (_, _) =>
@@ -82,6 +96,7 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
 
             player.Play();
             showSubtitle(line.Subtitle);
+            LinePlayed?.Invoke(characterId, line);
         };
         player.MediaEnded += async (_, _) =>
         {
@@ -175,5 +190,8 @@ internal sealed class PetVoicePlayer(Action<string?> showSubtitle, string? manag
         }
     }
 
-    private sealed record VoiceLine(string Path, string? Subtitle);
+    internal sealed record VoiceLine(string Path, string? Subtitle)
+    {
+        internal string Id => System.IO.Path.GetFileNameWithoutExtension(Path).ToLowerInvariant();
+    }
 }

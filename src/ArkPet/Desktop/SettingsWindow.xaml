@@ -334,7 +334,7 @@
                     </Border>
                 </StackPanel>
             </TabItem>
-            <TabItem Header="資源管理">
+            <TabItem x:Name="ResourceTab" Header="資源管理">
                 <ScrollViewer MaxHeight="520" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="模型資源" Style="{StaticResource PageTitle}" />

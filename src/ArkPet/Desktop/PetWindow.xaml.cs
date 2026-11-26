@@ -38,6 +38,13 @@ public partial class PetWindow : Window
     private Press? _press;
     private Timer? _gestureTimer;
     private bool _dragging;
+    private DesktopScenario _scenario;
+
+    internal event EventHandler? DesktopStateChanged;
+    internal event EventHandler? DragCompleted;
+    internal bool WantsVisible { get; private set; } = true;
+    internal bool ScenarioHidden => _scenario == DesktopScenario.Hidden;
+    internal bool WalkEnabled => Settings.FreeModeEnabled && _scenario != DesktopScenario.Focus;
     private bool _placementCheckPending;
     private bool _topmostCheckQueued;
     private ScaleAnchor _scaleAnchor = new(0.5, 0.91);
@@ -102,7 +109,7 @@ public partial class PetWindow : Window
         if (movementModesChanged)
         {
             PauseRoaming();
-            _player.SetMovementModes(settings.FreeModeEnabled, settings.PhysicsModeEnabled);
+            _player.SetMovementModes(WalkEnabled, settings.PhysicsModeEnabled);
             RefreshRoaming();
         }
     }
@@ -156,6 +163,18 @@ public partial class PetWindow : Window
         }
     }
 
+    internal event Action<string, PetVoicePlayer.VoiceLine> VoicePlayed
+    {
+        add => _voice.LinePlayed += value;
+        remove => _voice.LinePlayed -= value;
+    }
+
+    internal void ApplyVoiceFavorites(PetSettings settings) => Settings = Settings with
+    {
+        VoiceFavorites = settings.VoiceFavorites,
+        PreferFavoriteVoices = settings.PreferFavoriteVoices
+    };
+
     internal void StopVoice() => _voice.Stop();
 
     private void ApplyVoiceSettings()
@@ -206,11 +225,51 @@ public partial class PetWindow : Window
     {
         PauseRoaming();
         FacingTransform.ScaleX = -FacingTransform.ScaleX;
+        DesktopStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void TurnPet(object sender, RoutedEventArgs e) => TurnAround();
 
     internal bool HasOutfit => _player.HasOutfit;
+
+    internal void SetScenario(DesktopScenario scenario)
+    {
+        if (_scenario == scenario)
+        {
+            return;
+        }
+
+        _scenario = scenario;
+        if (scenario == DesktopScenario.Focus)
+        {
+            StopVoice();
+        }
+        _player.SetMovementModes(WalkEnabled, Settings.PhysicsModeEnabled);
+        PauseRoaming();
+        RefreshRoaming();
+        if (ScenarioHidden)
+        {
+            Hide();
+        }
+        else if (WantsVisible)
+        {
+            ShowPet();
+        }
+        DesktopStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal void SetVisibilityPreference(bool visible)
+    {
+        if (visible)
+        {
+            ShowPet();
+            return;
+        }
+
+        WantsVisible = false;
+        Hide();
+        DesktopStateChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     public void ShowPet(bool resetPosition = false)
     {
@@ -219,6 +278,7 @@ public partial class PetWindow : Window
             return;
         }
 
+        WantsVisible = true;
         StopGesture();
         PauseRoaming();
         new WindowInteropHelper(this).EnsureHandle();
@@ -230,6 +290,11 @@ public partial class PetWindow : Window
         }
 
         RecoverPlacement();
+        DesktopStateChanged?.Invoke(this, EventArgs.Empty);
+        if (ScenarioHidden)
+        {
+            return;
+        }
         Show();
         RecoverPlacement();
         NativeMethods.EnsureTopmost(_handle, Topmost);
@@ -267,6 +332,7 @@ public partial class PetWindow : Window
         if (e.Property == TopmostProperty)
         {
             QueueTopmostCheck();
+            DesktopStateChanged?.Invoke(this, EventArgs.Empty);
             if (VoiceBubble?.IsOpen == true)
             {
                 ConfigureVoiceBubble(this, EventArgs.Empty);
@@ -361,6 +427,7 @@ public partial class PetWindow : Window
         {
             if (_handle == IntPtr.Zero || !IsVisible)
             {
+                DesktopStateChanged?.Invoke(this, EventArgs.Empty);
                 return;
             }
 
@@ -373,6 +440,7 @@ public partial class PetWindow : Window
             {
                 _placementCheckPending = true;
             }
+            DesktopStateChanged?.Invoke(this, EventArgs.Empty);
         });
     }
 
@@ -417,16 +485,20 @@ public partial class PetWindow : Window
         }
     }
 
-    private bool ArtworkOverlapsDisplay(WindowBounds bounds)
+    private Rect GetArtworkRect(WindowBounds bounds)
     {
         double padding = _effectPadding * NativeMethods.GetDpiForWindow(_handle) / 96.0;
         double width = bounds.Width - 2 * padding;
         double height = bounds.Height - 2 * padding;
         double artworkX = FacingTransform.ScaleX < 0 ? 1 - _artworkBounds.Right : _artworkBounds.X;
-        var artwork = new Rect(bounds.Left + padding + artworkX * width,
+        return new Rect(bounds.Left + padding + artworkX * width,
             bounds.Top + padding + _artworkBounds.Y * height,
             _artworkBounds.Width * width, _artworkBounds.Height * height);
+    }
 
+    private bool ArtworkOverlapsDisplay(WindowBounds bounds)
+    {
+        Rect artwork = GetArtworkRect(bounds);
         return Screen.AllScreens.Any(screen =>
         {
             var display = screen.Bounds;
@@ -557,13 +629,24 @@ public partial class PetWindow : Window
     private async Task CompleteGestureAsync(Press press, Point cursor)
     {
         UpdateDrag(press, cursor);
-        bool touched = !_dragging && NativeMethods.WindowFromPoint(cursor) == _handle;
+        bool dragged = _dragging;
+        bool touched = !dragged && NativeMethods.WindowFromPoint(cursor) == _handle;
         StopGesture();
+        DesktopStateChanged?.Invoke(this, EventArgs.Empty);
 
+        if (dragged)
+        {
+            DragCompleted?.Invoke(this, EventArgs.Empty);
+        }
         if (touched && _player.HasOutfit)
         {
             _player.React();
-            await _voice.PlayRandomAsync();
+            if (_scenario != DesktopScenario.Focus)
+            {
+                await _voice.PlayRandomAsync(Settings.PreferFavoriteVoices
+                    ? Settings.VoiceFavorites
+                    : []);
+            }
         }
     }
 
@@ -622,7 +705,7 @@ public partial class PetWindow : Window
         RefreshRoaming();
     }
 
-    private void HidePet(object sender, RoutedEventArgs e) => Hide();
+    private void HidePet(object sender, RoutedEventArgs e) => SetVisibilityPreference(false);
 
     private sealed record Press(Point Start, int PrimaryButton, int DragWidth, int DragHeight)
     {

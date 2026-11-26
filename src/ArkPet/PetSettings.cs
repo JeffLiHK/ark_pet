@@ -37,9 +37,20 @@ internal sealed record PetSettings
     public string VoiceLanguage { get; init; } = Japanese;
     public string SubtitleLanguage { get; init; } = TraditionalChinese;
 
+    public VoiceFavorite[] VoiceFavorites { get; init; } = [];
+    public bool PreferFavoriteVoices { get; init; }
+
+    public bool RememberDesktopLayout { get; init; }
+    public SavedPet[] DesktopLayout { get; init; } = [];
+    public bool DailyRotationEnabled { get; init; }
+    public OutfitKey[] RotationCandidates { get; init; } = [];
+    public DailyOutfit? DailyOutfit { get; init; }
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? OtherSettings { get; init; }
 }
+
+internal sealed record VoiceFavorite(string CharacterId, string LineId, string? Text);
 
 internal sealed class PetSettingsStore(string filePath)
 {
@@ -56,6 +67,17 @@ internal sealed class PetSettingsStore(string filePath)
             {
                 return settings with
                 {
+                    VoiceFavorites = settings.VoiceFavorites is { } favorites
+                        ? Array.FindAll(favorites, favorite => favorite is { CharacterId.Length: > 0, LineId.Length: > 0 })
+                        : [],
+                    DesktopLayout = settings.DesktopLayout is { } layout
+                        ? Array.FindAll(layout, pet => pet is { Slot: >= 0, Outfit.CharacterId.Length: > 0, Outfit.OutfitId.Length: > 0 })
+                        : [],
+                    RotationCandidates = settings.RotationCandidates is { } candidates
+                        ? Array.FindAll(candidates, outfit => outfit is { CharacterId.Length: > 0, OutfitId.Length: > 0 })
+                        : [],
+                    DailyOutfit = settings.DailyOutfit is { Outfit.CharacterId.Length: > 0, Outfit.OutfitId.Length: > 0 }
+                        ? settings.DailyOutfit : null,
                     SizePercent = PetSettings.Sizes.Contains(settings.SizePercent) ? settings.SizePercent : PetSettings.DefaultSize,
                     AnimationFps = PetSettings.FrameRates.Contains(settings.AnimationFps) ? settings.AnimationFps : PetSettings.DefaultAnimationFps,
                     WalkingSpeedPercent = PetSettings.WalkingSpeeds.Contains(settings.WalkingSpeedPercent)
